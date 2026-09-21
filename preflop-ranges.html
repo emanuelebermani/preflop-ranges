@@ -1,0 +1,875 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Preflop">
+<meta name="description" content="Preflop range lookup by stack depth, seat and action.">
+<meta name="theme-color" id="themeColor" content="#E8E6DF">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Preflop ranges</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme:light dark;
+  --bg:#E8E6DF; --panel:#F6F5F1; --ink:#1C1F25; --muted:#5B6170; --line:#CBC7BD;
+  --btn:#FFFFFF; --btnink:#1C1F25; --btnon:#1C1F25; --btnonink:#F6F5F1;
+  /* action fills are checked for colour-blind separation and each carries its own label ink at 4.5:1 or better */
+  --raise:#B5352C; --jam:#E8A317; --call:#17997A; --check:#246CC6;
+  --raisetx:#FFFFFF; --jamtx:#14171C; --calltx:#14171C; --checktx:#FFFFFF;
+  --fold:#D5D2C9; --foldink:#4F5562;
+}
+:root[data-theme="light"]{color-scheme:light}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#14171C; --panel:#1D2127; --ink:#ECE9E1; --muted:#98A0AC; --line:#2E333B;
+    --btn:#242930; --btnink:#ECE9E1; --btnon:#ECE9E1; --btnonink:#14171C;
+    --raise:#C8413F; --jam:#B88D00; --call:#14A38B; --check:#3987E5;
+    --raisetx:#FFFFFF; --jamtx:#14171C; --calltx:#14171C; --checktx:#14171C;
+    --fold:#252A31; --foldink:#8E96A3;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#14171C; --panel:#1D2127; --ink:#ECE9E1; --muted:#98A0AC; --line:#2E333B;
+  --btn:#242930; --btnink:#ECE9E1; --btnon:#ECE9E1; --btnonink:#14171C;
+  --raise:#C8413F; --jam:#B88D00; --call:#14A38B; --check:#3987E5;
+  --raisetx:#FFFFFF; --jamtx:#14171C; --calltx:#14171C; --checktx:#14171C;
+  --fold:#252A31; --foldink:#8E96A3;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif;font-size:16px;line-height:1.3;-webkit-text-size-adjust:100%}
+.app{max-width:560px;margin:0 auto;padding:12px max(12px,env(safe-area-inset-right)) calc(36px + env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left))}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+h1{font-size:21px;font-weight:600;margin:0}
+button{font:inherit;color:var(--btnink);background:var(--btn);border:1px solid var(--line);border-radius:9px;min-height:42px;padding:0 10px;cursor:pointer;touch-action:manipulation}
+button.on{background:var(--btnon);color:var(--btnonink);border-color:var(--btnon)}
+button:focus-visible{outline:2px solid var(--check);outline-offset:2px}
+.seg{display:flex;gap:4px}
+.seg button{min-height:38px;padding:0 14px;font-weight:500}
+.field{margin:10px 0 0}
+.label{font-size:13px;color:var(--muted);margin-bottom:5px}
+.row{display:flex;gap:6px;flex-wrap:wrap}
+.row>button{flex:1 1 0;padding:0 6px}
+.seats{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.seats button{padding:0 4px}
+.ranks{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px}
+.ranks button{padding:0;font-size:19px;font-weight:600}
+.stackrow{display:flex;gap:6px;align-items:stretch}
+.seatsrow{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 6px 6px 12px}
+.seatsrow .lbl{font-size:15px;color:var(--muted)}
+.seatsrow .ctl{display:flex;align-items:center;gap:6px}
+.seatsrow .ctl button{width:46px;min-height:40px;font-size:22px;padding:0}
+.seatsrow output{min-width:78px;text-align:center;font-size:22px;font-weight:600}
+button[disabled]{opacity:.35;cursor:not-allowed}
+.stackrow input{flex:1;min-width:0;font:inherit;font-size:28px;font-weight:600;text-align:center;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:9px;min-height:50px}
+.stackrow input:focus{outline:2px solid var(--check);outline-offset:1px}
+.step{width:58px;font-size:26px;font-weight:500;padding:0}
+.chips{display:flex;gap:6px;margin-top:6px}
+.chips button{flex:1;min-height:36px;font-size:15px;padding:0}
+.tier{font-size:14px;color:var(--muted);margin-top:6px}
+/* sticks to whichever edge it would scroll past, so the answer stays on screen while settings or the grid are in use */
+.readout{position:sticky;top:0;bottom:0;z-index:5;display:flex;align-items:baseline;gap:4px 12px;flex-wrap:wrap;margin:14px -12px 10px;padding:10px 12px max(10px,env(safe-area-inset-bottom));min-height:68px;background:var(--bg);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.readout .h{font-size:36px;font-weight:700;line-height:1}
+.readout .a{font-size:28px;font-weight:600;line-height:1}
+.readout .a i{display:inline-block;width:16px;height:16px;border-radius:4px;margin-right:8px;vertical-align:1px}
+.readout .w{font-size:15px;color:var(--muted);align-self:center}
+.readout .q{opacity:.35}
+.readout .sum{font-size:22px;font-weight:600;line-height:1.15}
+.readout .s{font-size:14px;color:var(--muted);flex-basis:100%}
+.readout .clr{margin-left:auto;align-self:center;width:40px;min-height:40px;padding:0;font-size:24px;line-height:1;color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(13,1fr);gap:2px}
+.cell{aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;font-size:clamp(8px,2.45vw,12px);font-weight:600;border-radius:3px;color:var(--foldink);background:var(--fold);cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.cell.Fold{font-weight:500}
+.cell.Raise,.cell.Iso,.cell.Bet3{background:var(--raise);color:var(--raisetx)}
+.cell.Jam{background:var(--jam);color:var(--jamtx)}
+.cell.Call,.cell.Limp{background:var(--call);color:var(--calltx)}
+.cell.Check{background:var(--check);color:var(--checktx)}
+.cell.sel{outline:3px solid var(--ink);outline-offset:-3px}
+.cell:focus-visible{outline:2px solid var(--ink);outline-offset:1px;position:relative;z-index:1}
+.panel{margin-top:12px}
+.panel>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--btn);color:var(--btnink);border:1px solid var(--line);border-radius:9px;min-height:46px;padding:0 14px;font-weight:500;cursor:pointer}
+.panel>summary::-webkit-details-marker{display:none}
+.panel>summary:focus-visible{outline:2px solid var(--check);outline-offset:2px}
+.panel>summary .arrow{font-size:13px;color:var(--muted)}
+.panel[open]>summary{border-bottom-left-radius:0;border-bottom-right-radius:0}
+.panel[open]>summary .shut,.panel:not([open])>summary .open{display:none}
+.panel .body{border:1px solid var(--line);border-top:0;border-bottom-left-radius:9px;border-bottom-right-radius:9px;padding:10px}
+.panel[open]>summary .arrow{transform:rotate(180deg)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin:10px 0 0;font-size:15px}
+.legend span i{display:inline-block;width:13px;height:13px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.legend b{font-weight:600}
+.notes{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:15px;margin-top:10px}
+.notes p{margin:0 0 6px}
+.notes p:last-child{margin:0}
+.hint{color:var(--muted);font-size:13px;margin-top:16px}
+.themerow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;font-size:13px;color:var(--muted)}
+.themerow .seg button{min-height:34px;padding:0 12px;font-size:14px}
+.hidden{display:none}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (prefers-reduced-motion:no-preference){ button{transition:background .12s,color .12s} }
+</style>
+</head>
+<body>
+<main class="app">
+  <header class="top">
+    <h1>Preflop ranges</h1>
+    <div class="seg" id="flavor" role="group" aria-label="Range style">
+      <button data-v="0">GTO</button>
+      <button data-v="1">Live</button>
+    </div>
+  </header>
+
+  <section class="field">
+    <div class="seatsrow">
+      <span class="lbl">Players at the table</span>
+      <span class="ctl">
+        <button id="seatMinus" aria-label="Fewer players">&minus;</button>
+        <output id="seatsOut" aria-live="polite">9</output>
+        <button id="seatPlus" aria-label="More players">+</button>
+      </span>
+    </div>
+  </section>
+
+  <section class="field">
+    <div class="label">Effective stack in big blinds (the shorter of you and your opponent)</div>
+    <div class="stackrow">
+      <button class="step" id="minus" aria-label="Less">&minus;</button>
+      <input type="number" id="bb" inputmode="numeric" min="1" max="400" value="100" aria-label="Big blinds">
+      <button class="step" id="plus" aria-label="More">+</button>
+    </div>
+    <div class="chips" id="chips" role="group" aria-label="Common stack sizes">
+      <button data-bb="100">100</button><button data-bb="50">50</button><button data-bb="30">30</button><button data-bb="20">20</button><button data-bb="12">12</button><button data-bb="7">7</button>
+    </div>
+    <div class="tier" id="tierLabel"></div>
+  </section>
+
+  <section class="field">
+    <div class="label" id="lHand">My hand (tap two ranks, the same one twice for a pair)</div>
+    <div class="ranks" id="ranks" role="group" aria-labelledby="lHand"></div>
+    <div class="row" id="suit" role="group" aria-label="Suited or offsuit">
+      <button data-v="s">Suited</button><button data-v="o">Offsuit</button>
+    </div>
+  </section>
+
+  <section class="field">
+    <div class="label" id="lScn">Situation</div>
+    <div class="row" id="scn" role="group" aria-labelledby="lScn">
+      <button data-v="rfi">First in</button>
+      <button data-v="vs">Facing a raise</button>
+      <button data-v="limp">Facing limpers</button>
+    </div>
+  </section>
+
+  <section class="field">
+    <div class="label" id="lHero">My seat</div>
+    <div class="seats" id="hero" role="group" aria-labelledby="lHero"></div>
+  </section>
+
+  <section class="field" id="fRaiser">
+    <div class="label" id="lRaiser">Raiser's seat</div>
+    <div class="seats" id="raiser" role="group" aria-labelledby="lRaiser"></div>
+  </section>
+
+  <section class="field" id="fSize">
+    <div class="label" id="lSize">Open size</div>
+    <div class="row" id="size" role="group" aria-labelledby="lSize">
+      <button data-v="2">2x</button><button data-v="2.5">2.5x</button><button data-v="3">3x</button><button data-v="4">4x or more</button>
+    </div>
+  </section>
+
+  <section class="field" id="fCallers">
+    <div class="label" id="lCallers">Callers before me</div>
+    <div class="row" id="callers" role="group" aria-labelledby="lCallers">
+      <button data-v="0">None</button><button data-v="1">One</button><button data-v="2">Two or more</button>
+    </div>
+  </section>
+
+  <section class="field" id="fLimpers">
+    <div class="label" id="lLimpers">Limpers before me</div>
+    <div class="row" id="limpers" role="group" aria-labelledby="lLimpers">
+      <button data-v="1">One</button><button data-v="2">Two</button><button data-v="3">Three or more</button>
+    </div>
+  </section>
+
+  <!-- both stay in the page rather than being re-created: the readout so it can stick, the live region so answers are spoken -->
+  <div class="readout" id="readout"></div>
+  <div class="sr" id="sr" aria-live="polite" aria-atomic="true"></div>
+  <div id="out"></div>
+
+  <p class="hint">Add this page to your home screen for one tap access at the table. Your last settings are kept on this device.<span id="offline" class="hidden"> It is saved here too, so it opens without a connection.</span></p>
+  <div class="themerow">
+    <span id="lTheme">Theme</span>
+    <div class="seg" id="theme" role="group" aria-labelledby="lTheme">
+      <button data-v="auto">Auto</button><button data-v="light">Light</button><button data-v="dark">Dark</button>
+    </div>
+  </div>
+</main>
+
+<script>
+(function(){
+"use strict";
+/* ---------- hand utilities ---------- */
+var R="AKQJT98765432";
+function rv(c){return 14-R.indexOf(c);}
+function rc(v){return R[14-v];}
+var P=["UTG","UTG+1","UTG+2","LJ","HJ","CO","BTN","SB","BB"];
+var cache={};
+
+function tok(t){
+  t=t.trim(); var out=[]; if(!t) return out;
+  var m=t.match(/^([AKQJT2-9])([AKQJT2-9])([so])?(\+)?$/);
+  var a,b,s,x,v,lows,sufs;
+  if(m){
+    a=m[1];b=m[2];s=m[3];
+    if(a===b){ if(m[4]){ for(v=rv(a);v<=14;v++) out.push(rc(v)+rc(v)); } else out.push(a+a); return out; }
+    if(rv(a)<rv(b)){x=a;a=b;b=x;}
+    sufs=s?[s]:["s","o"]; lows=[];
+    if(m[4]){ for(v=rv(b);v<rv(a);v++) lows.push(v); } else lows.push(rv(b));
+    lows.forEach(function(lv){ sufs.forEach(function(sf){ out.push(a+rc(lv)+sf); }); });
+    return out;
+  }
+  m=t.match(/^([AKQJT2-9])([AKQJT2-9])([so])?-([AKQJT2-9])([AKQJT2-9])([so])?$/);
+  if(m){
+    var a1=m[1],b1=m[2],s1=m[3],a2=m[4],b2=m[5],s2=m[6],lo,hi;
+    if(a1===b1&&a2===b2){ lo=Math.min(rv(a1),rv(a2)); hi=Math.max(rv(a1),rv(a2)); for(v=lo;v<=hi;v++) out.push(rc(v)+rc(v)); return out; }
+    if(rv(a1)<rv(b1)){x=a1;a1=b1;b1=x;} if(rv(a2)<rv(b2)){x=a2;a2=b2;b2=x;}
+    if(a1!==a2) return out;
+    s=s1||s2; sufs=s?[s]:["s","o"];
+    lo=Math.min(rv(b1),rv(b2)); hi=Math.max(rv(b1),rv(b2));
+    for(v=lo;v<=hi;v++){ (function(vv){ sufs.forEach(function(sf){ out.push(a1+rc(vv)+sf); }); })(v); }
+    return out;
+  }
+  return out;
+}
+function parse(str){
+  var s=new Set(); if(!str) return s;
+  if(cache[str]){ cache[str].forEach(function(h){s.add(h);}); return s; }
+  str.split(/[,\s]+/).forEach(function(t){ tok(t).forEach(function(h){ s.add(h); }); });
+  cache[str]=Array.from(s); return s;
+}
+function union(a,b){ var s=new Set(a); b.forEach(function(h){s.add(h);}); return s; }
+function minus(a,b){ var s=new Set(); a.forEach(function(h){ if(!b.has(h)) s.add(h); }); return s; }
+function keep(a,fn){ var s=new Set(); a.forEach(function(h){ if(fn(h)) s.add(h); }); return s; }
+function isPair(h){return h.length===2;}
+function isSuited(h){return h[2]==="s";}
+function isOff(h){return h[2]==="o";}
+function combos(h){return isPair(h)?6:(isSuited(h)?4:12);}
+function score(h){
+  var a=rv(h[0]),b=rv(h[1]);
+  if(a===b) return 40+a*4;
+  var hi=Math.max(a,b),lo=Math.min(a,b),s=isSuited(h),gap=hi-lo-1;
+  var sc=hi*2.2+lo*1.6;
+  if(s) sc+=9;
+  if(gap===0) sc+=5; else if(gap===1) sc+=3; else if(gap===2) sc+=1.5;
+  if(hi===14){ sc+=2; if(s) sc+=2; }
+  if(lo>=10) sc+=3;
+  return sc;
+}
+/* remove the weakest share of a set; fn limits which hands are eligible */
+function split(set,frac,fn){
+  var el=Array.from(set).filter(function(h){return !fn||fn(h);}).sort(function(x,y){return score(x)-score(y);});
+  var n=Math.round(el.length*frac), kept=new Set(set), removed=new Set(), i;
+  for(i=0;i<n;i++){ kept.delete(el[i]); removed.add(el[i]); }
+  return {kept:kept,removed:removed};
+}
+function trim(set,frac,fn){ return split(set,frac,fn).kept; }
+
+/* ---------- ranges: first in ---------- */
+var RFI={
+ "100":{
+  "UTG":"66+, A9s+, KTs+, QTs+, JTs, T9s, AJo+, KQo",
+  "UTG+1":"55+, A8s+, K9s+, QTs+, JTs, T9s, 98s, ATo+, KQo",
+  "UTG+2":"44+, A5s+, K9s+, Q9s+, J9s+, T9s, 98s, 87s, ATo+, KJo+",
+  "LJ":"33+, A2s+, K9s+, Q9s+, J9s+, T9s, 98s, 87s, 76s, ATo+, KJo+, QJo",
+  "HJ":"22+, A2s+, K8s+, Q9s+, J9s+, T8s+, 97s+, 87s, 76s, 65s, A9o+, KTo+, QTo+, JTo",
+  "CO":"22+, A2s+, K5s+, Q8s+, J8s+, T8s+, 97s+, 86s+, 75s+, 65s, 54s, A9o+, KTo+, Q9o+, J9o+, T9o",
+  "BTN":"22+, A2s+, K2s+, Q5s+, J7s+, T7s+, 96s+, 86s+, 75s+, 64s+, 54s, A2o+, K8o+, Q9o+, J9o+, T9o, 98o",
+  "SB":"22+, A2s+, K2s+, Q6s+, J7s+, T7s+, 97s+, 86s+, 75s+, 65s, 54s, A2o+, K9o+, Q9o+, J9o+, T9o"
+ },
+ "50":{
+  "UTG":"66+, A9s+, KTs+, QTs+, JTs, AJo+, KQo",
+  "UTG+1":"55+, A8s+, K9s+, QTs+, JTs, T9s, ATo+, KQo",
+  "UTG+2":"44+, A5s+, K9s+, Q9s+, J9s+, T9s, 98s, ATo+, KJo+",
+  "LJ":"33+, A2s+, K9s+, Q9s+, J9s+, T9s, 98s, 87s, ATo+, KJo+, QJo",
+  "HJ":"22+, A2s+, K8s+, Q9s+, J9s+, T8s+, 97s+, 87s, 76s, A9o+, KTo+, QTo+, JTo",
+  "CO":"22+, A2s+, K5s+, Q8s+, J8s+, T8s+, 97s+, 86s+, 75s+, 65s, A8o+, KTo+, Q9o+, J9o+, T9o",
+  "BTN":"22+, A2s+, K2s+, Q5s+, J7s+, T7s+, 96s+, 86s+, 75s+, 65s, 54s, A2o+, K8o+, Q9o+, J9o+, T9o, 98o",
+  "SB":"22+, A2s+, K2s+, Q6s+, J7s+, T7s+, 97s+, 86s+, 75s+, 65s, A2o+, K9o+, Q9o+, J9o+, T9o"
+ },
+ "30":{
+  "UTG":"66+, A9s+, KJs+, QJs, AJo+, KQo",
+  "UTG+1":"66+, A8s+, KTs+, QTs+, JTs, ATo+, KQo",
+  "UTG+2":"55+, A7s+, KTs+, QTs+, JTs, T9s, ATo+, KJo+",
+  "LJ":"44+, A5s+, K9s+, QTs+, JTs, T9s, 98s, ATo+, KJo+, QJo",
+  "HJ":"33+, A2s+, K9s+, Q9s+, J9s+, T9s, 98s, 87s, A9o+, KTo+, QTo+, JTo",
+  "CO":"22+, A2s+, K7s+, Q8s+, J8s+, T8s+, 97s+, 87s, 76s, A8o+, KTo+, QTo+, JTo",
+  "BTN":"22+, A2s+, K2s+, Q6s+, J7s+, T7s+, 96s+, 86s+, 75s+, 65s, A2o+, K8o+, Q9o+, J9o+, T9o, 98o",
+  "SB":"22+, A2s+, K2s+, Q7s+, J8s+, T8s+, 97s+, 86s+, 76s, A2o+, K9o+, Q9o+, J9o+, T9o"
+ },
+ "20":{
+  "UTG":"77+, ATs+, KJs+, AJo+, KQo",
+  "UTG+1":"66+, A9s+, KTs+, QJs, ATo+, KQo",
+  "UTG+2":"55+, A8s+, KTs+, QTs+, JTs, ATo+, KJo+",
+  "LJ":"44+, A5s+, K9s+, QTs+, JTs, T9s, ATo+, KJo+, QJo",
+  "HJ":"33+, A2s+, K9s+, Q9s+, J9s+, T9s, 98s, A9o+, KTo+, QTo+, JTo",
+  "CO":"22+, A2s+, K8s+, Q9s+, J9s+, T9s, 98s, 87s, A7o+, KTo+, QTo+, JTo",
+  "BTN":"22+, A2s+, K4s+, Q7s+, J8s+, T8s+, 97s+, 86s+, 76s, 65s, A2o+, K8o+, Q9o+, J9o+, T9o",
+  "SB":"22+, A2s+, K5s+, Q8s+, J8s+, T8s+, 97s+, 87s, 76s, A2o+, K9o+, Q9o+, J9o+, T9o"
+ },
+ "10":{
+  "UTG":"66+, A9s+, KQs, AJo+",
+  "UTG+1":"55+, A8s+, KJs+, ATo+, KQo",
+  "UTG+2":"44+, A7s+, KTs+, QJs, ATo+, KJo+",
+  "LJ":"33+, A5s+, K9s+, QTs+, JTs, A9o+, KTo+, QJo",
+  "HJ":"22+, A2s+, K8s+, Q9s+, J9s+, T9s, A8o+, KTo+, QTo+, JTo",
+  "CO":"22+, A2s+, K5s+, Q8s+, J8s+, T8s+, 98s, A5o+, K9o+, Q9o+, J9o+, T9o",
+  "BTN":"22+, A2s+, K2s+, Q5s+, J7s+, T7s+, 97s+, 86s+, 76s, A2o+, K7o+, Q8o+, J8o+, T8o+, 98o",
+  "SB":"22+, A2s+, K2s+, Q3s+, J5s+, T6s+, 96s+, 86s+, 75s+, 65s, A2o+, K5o+, Q8o+, J8o+, T8o+, 98o"
+ },
+ "sub10":{
+  "UTG":"22+, A2s+, A8o+, K9s+, KQo, QTs+, JTs",
+  "UTG+1":"22+, A2s+, A5o+, K7s+, KTo+, Q9s+, QJo, J9s+, T9s",
+  "UTG+2":"22+, A2s+, A4o+, K5s+, K9o+, Q8s+, QTo+, J8s+, JTo, T8s+, 98s",
+  "LJ":"22+, A2s+, A2o+, K4s+, K9o+, Q7s+, QTo+, J8s+, JTo, T8s+, 97s+, 87s",
+  "HJ":"22+, A2s+, A2o+, K2s+, K8o+, Q6s+, Q9o+, J7s+, JTo, T7s+, 97s+, 86s+, 76s",
+  "CO":"22+, A2s+, A2o+, K2s+, K6o+, Q4s+, Q8o+, J6s+, J9o+, T7s+, T9o, 96s+, 86s+, 75s+, 65s",
+  "BTN":"22+, A2s+, A2o+, K2s+, K2o+, Q2s+, Q6o+, J4s+, J8o+, T6s+, T8o+, 95s+, 98o, 85s+, 74s+, 64s+, 53s+",
+  "SB":"22+, A2s+, A2o+, K2s+, K2o+, Q2s+, Q4o+, J2s+, J7o+, T4s+, T7o+, 95s+, 97o+, 84s+, 87o, 74s+, 63s+, 53s+, 43s"
+ }
+};
+
+/* heads up: the small blind is also the button and acts last after the flop */
+var HU={
+ "100":"22+, A2s+, A2o+, K2s+, K2o+, Q2s+, Q2o+, J2s+, J4o+, T2s+, T6o+, 92s+, 96o+, 82s+, 86o+, 72s+, 75o+, 62s+, 64o+, 52s+, 54o, 42s+, 32s",
+ "50":"22+, A2s+, A2o+, K2s+, K2o+, Q2s+, Q3o+, J2s+, J5o+, T2s+, T6o+, 93s+, 96o+, 84s+, 86o+, 73s+, 75o+, 63s+, 65o, 52s+, 42s+, 32s",
+ "30":"22+, A2s+, A2o+, K2s+, K2o+, Q2s+, Q4o+, J2s+, J6o+, T3s+, T6o+, 93s+, 96o+, 84s+, 86o+, 73s+, 76o, 63s+, 52s+, 42s+, 32s",
+ "20":"22+, A2s+, A2o+, K2s+, K2o+, Q2s+, Q5o+, J2s+, J7o+, T4s+, T7o+, 94s+, 97o+, 84s+, 87o, 74s+, 63s+, 53s+, 43s",
+ "10":"22+, A2s+, A2o+, K2s+, K2o+, Q2s+, Q6o+, J3s+, J8o+, T5s+, T8o+, 95s+, 98o, 85s+, 75s+, 64s+, 54s",
+ "sub10":"22+, A2s+, A2o+, K2s+, K2o+, Q2s+, Q3o+, J2s+, J6o+, T3s+, T6o+, 93s+, 96o+, 84s+, 86o+, 73s+, 76o, 63s+, 52s+, 43s"
+};
+/* heads up big blind 3bets (deep) or jams (short) vs the small blind, much wider because the small blind opens so wide */
+var HUDEF={
+ "100":"77+, A9s+, ATo+, KTs+, KJo+, QTs+, JTs",
+ "50":"66+, A8s+, ATo+, KTs+, KJo+, QTs+, JTs",
+ "30":"55+, A7s+, A9o+, K9s+, KTo+, QTs+, JTs",
+ "20":"55+, A2s+, A7o+, K8s+, KTo+, QTs+, QJo, JTs",
+ "10":"22+, A2s+, A2o+, K5s+, K9o+, Q8s+, QTo+, J8s+, JTo, T8s+, 98s",
+ "sub10":"22+, A2s+, A2o+, K2s+, K5o+, Q5s+, Q8o+, J7s+, J9o+, T7s+, T9o, 97s+, 87s"
+};
+
+/* ---------- ranges: facing a raise, 100bb base ---------- */
+var VR100={
+ MID:{
+  EP:{v:"QQ+, AKs, AKo", b:"A5s, A4s", c:"JJ-55, ATs+, KJs+, QJs, JTs, T9s, AQo"},
+  MP:{v:"JJ+, AQs+, AKo", b:"A5s, A4s", c:"TT-33, A9s+, KTs+, QTs+, JTs, T9s, 98s, AQo, AJo, KQo"}
+ },
+ LATE:{
+  EP:{v:"QQ+, AKs, AKo", b:"A5s, A4s", c:"JJ-22, A8s+, KTs+, QTs+, JTs, T9s, 98s, 87s, 76s, AQo, AJo, KQo"},
+  MP:{v:"JJ+, AQs+, AKo", b:"A5s, A4s, A3s", c:"TT-22, A6s+, KTs+, QTs+, J9s+, T9s, 98s, 87s, 76s, 65s, AQo, AJo, KQo, KJo, QJo"},
+  LP:{v:"TT+, AJs+, AQo+", b:"A5s-A2s, K9s, 65s, 54s", c:"99-22, A6s-ATs, KTs+, QTs+, J9s+, T8s+, 97s+, 87s, 76s, 65s, ATo, AJo, KTo+, QTo+, JTo"}
+ },
+ SB:{
+  EP:{v:"JJ+, AQs+, AQo+", b:"A5s, A4s", c:"TT-77, AJs, ATs, KQs, KJs, QJs, JTs"},
+  MP:{v:"TT+, AJs+, AQo+, KQs", b:"A5s-A2s, K9s", c:"99-55, ATs, A9s, KJs, KTs, QJs, QTs, JTs, T9s, AJo, KQo"},
+  LP:{v:"99+, ATs+, AJo+, KQs, KJs, KQo", b:"A5s-A2s, K9s, Q9s, 76s, 65s", c:"88-22, A9s-A6s, KTs, QJs, QTs, JTs, T9s, 98s, 87s, ATo, KJo, QJo"}
+ },
+ BB:{
+  EP:{v:"QQ+, AKs, AKo", b:"A5s, A4s", c:"JJ-22, A2s+, K5s+, Q8s+, J8s+, T8s+, 97s+, 86s+, 75s+, 64s+, 54s, AQo, AJo, ATo, KQo, KJo, QJo, JTo"},
+  MP:{v:"JJ+, AQs+, AKo", b:"A5s-A2s, 76s, 65s", c:"TT-22, A2s+, K5s+, Q6s+, J7s+, T7s+, 96s+, 86s+, 75s+, 64s+, 54s, AQo, AJo, ATo, A9o, KQo, KJo, KTo, QJo, QTo, JTo, T9o"},
+  LP:{v:"TT+, AJs+, AQo+, KQs", b:"A5s-A2s, K9s, Q9s, 76s, 65s, 54s", c:"99-22, A2s+, K2s+, Q2s+, J5s+, T6s+, 95s+, 85s+, 74s+, 64s+, 53s+, 43s, A2o+, K8o+, Q9o+, J9o+, T9o, 98o"},
+  SB:{v:"99+, ATs+, AJo+, KQs, KJs, KQo", b:"K9s-K7s, Q9s, 65s", c:"88-22, A2s+, K2s+, Q2s+, J4s+, T6s+, 95s+, 85s+, 74s+, 64s+, 53s+, 43s, A2o+, K5o+, Q8o+, J8o+, T8o+, 98o, 87o"}
+ }
+};
+/* 3bet or jam value by stack tier and raiser group */
+var VAL={
+ "50":{EP:"QQ+, AKs, AKo", MP:"TT+, AJs+, AQo+", LP:"99+, ATs+, AJo+, KQs", SB:"88+, A9s+, ATo+, KJs+, KQo"},
+ "30":{EP:"JJ+, AQs+, AKo", MP:"TT+, AJs+, AQo+, KQs", LP:"99+, ATs+, AJo+, KQs, KJs", SB:"77+, A8s+, ATo+, KJs+, KQo"},
+ "20":{EP:"JJ+, AKs, AKo", MP:"99+, AQs+, AKo", LP:"77+, ATs+, AJo+, KQs, KJs, KQo", SB:"66+, A8s+, ATo+, KJs+, KQo"},
+ "10":{EP:"88+, AJs+, AQo+, KQs", MP:"66+, A9s+, ATo+, KJs+, KQo", LP:"44+, A2s+, A8o+, KTs+, KJo+, QTs+, JTs", SB:"22+, A2s+, A5o+, K9s+, KTo+, Q9s+, QJo, J9s+, T9s"},
+ "sub10":{EP:"77+, AJs+, AQo+", MP:"55+, A9s+, ATo+, KQs", LP:"22+, A2s+, A7o+, K9s+, KTo+, QTs+, JTs", SB:"22+, A2s+, A2o+, K7s+, K9o+, Q9s+, QTo+, J9s+, T9s"}
+};
+var BLUFF={
+ "30":{EP:"A5s", MP:"A5s, A4s", LP:"A5s, A4s", SB:"A5s, A4s"},
+ "20":{EP:"", MP:"A5s", LP:"A5s, A4s", SB:"A5s-A2s"}
+};
+/* calls at 20bb by hero role and raiser group */
+var CALL20={
+ MID:{EP:"TT-77, AQs, AJs, KQs", MP:"88-55, AJs, ATs, KQs, KJs, QJs, JTs, AQo"},
+ LATE:{EP:"TT-55, AQs, AJs, ATs, KQs, KJs, QJs, JTs, T9s, AQo",
+       MP:"88-44, AJs, ATs, A9s, KQs, KJs, KTs, QJs, QTs, JTs, T9s, 98s, AQo, AJo, KQo",
+       LP:"66-22, A9s-A2s, KTs+, QTs+, JTs, T9s, 98s, 87s, 76s, ATo, KJo, QJo, JTo"},
+ SB:{EP:"TT-77, AQs, AJs, KQs", MP:"88-55, AJs, ATs, KQs, KJs, QJs, JTs", LP:"66-44, A9s-A7s, KTs, QTs, JTs"},
+ BB:{EP:"TT-22, AQs-A2s, KTs+, QTs+, JTs, T9s, 98s, 87s, 76s, 65s, AQo, AJo, KQo",
+     MP:"88-22, AJs-A2s, K9s+, Q9s+, J9s+, T8s+, 97s+, 87s, 76s, 65s, 54s, AQo, AJo, ATo, KQo, KJo, QJo, JTo",
+     LP:"66-22, A9s-A2s, K5s+, Q7s+, J7s+, T7s+, 96s+, 86s+, 75s+, 65s, 54s, ATo, A9o, KJo, KTo, QJo, QTo, JTo, T9o",
+     SB:"55-22, A7s-A2s, K2s+, Q5s+, J7s+, T7s+, 96s+, 86s+, 75s+, 64s+, 54s, A9o-A2o, KJo-K8o, QJo-Q9o, JTo, J9o, T9o, 98o"}
+};
+/* big blind calls at 10 to 14bb, only vs a small open */
+var CALL10={"2":"66-22, A8s-A2s, KTs+, QTs+, JTs, T9s, 98s, 87s", "2.5":"66-33, A8s-A5s, KJs+, QJs, JTs"};
+/* squeeze value when two or more callers are already in */
+var PREMIUM={
+ "100":{EP:"QQ+, AKs, AKo", MP:"JJ+, AQs+, AKo", LP:"TT+, AJs+, AQo+", SB:"TT+, AJs+, AQo+"},
+ "50":{EP:"QQ+, AKs, AKo", MP:"JJ+, AQs+, AKo", LP:"TT+, AJs+, AQo+", SB:"TT+, AJs+, AQo+"},
+ "30":{EP:"QQ+, AKs, AKo", MP:"JJ+, AQs+, AKo", LP:"TT+, AQs+, AKo", SB:"TT+, AQs+, AKo"},
+ "20":{EP:"JJ+, AKs, AKo", MP:"TT+, AQs+, AKo", LP:"99+, AJs+, AQo+", SB:"99+, AJs+, AQo+"},
+ "10":{EP:"TT+, AQs+, AKo", MP:"88+, AJs+, AQo+", LP:"77+, ATs+, AJo+", SB:"66+, A9s+, ATo+"},
+ "sub10":{EP:"99+, AJs+, AQo+", MP:"66+, ATs+, AJo+", LP:"44+, A5s+, A9o+, KQs", SB:"33+, A2s+, A8o+, KJs+"}
+};
+/* extra value 3bets in live mode (they call 3bets with worse) */
+var LIVEADD={
+ "100":{EP:"JJ, AQs", MP:"TT, AJs, AQo", LP:"99, ATs, AJo, KQs", SB:"88, A9s, ATo, KJs, KQo"},
+ "50":{EP:"JJ, AQs", MP:"99, ATs, AJo", LP:"88, A9s, ATo, KJs", SB:"77, A8s, A9o, KTs, KJo"},
+ "30":{EP:"TT, AQo", MP:"99, ATs, AJo", LP:"88, A9s, ATo, KQo, KJs", SB:"66, A7s, A9o, KTs, KJo"},
+ "20":{EP:"TT, AQs", MP:"88, AJs, AQo", LP:"66, A9s, ATo, QJs", SB:"55, A7s, A9o, KTs"},
+ "10":{EP:"88, AJs", MP:"66, A9s, ATo", LP:"44, A8o", SB:"33, A6o"},
+ "sub10":{EP:"66, ATs, AJo", MP:"44, A8s, A9o", LP:"", SB:""}
+};
+/* extra big blind defence vs a min raise, gated by hand strength per raiser group */
+var EXTRA="K2s+, Q2s+, J5s+, T6s+, 95s+, 85s+, 74s+, 64s+, 53s+, 43s, A2o+, K7o+, Q8o+, J8o+, T8o+, 98o, 87o, 76o";
+var EXTRA_MIN={EP:44, MP:40, LP:34, SB:30};
+
+/* ---------- ranges: facing limpers ---------- */
+var LIMP={
+ "100":{
+  MID:{iso:"77+, ATs+, KJs+, AJo+, KQo", jam:"", over:"66-22, A9s-A2s, KTs, K9s, QTs+, JTs, T9s, 98s, 87s, 76s, 65s"},
+  LATE:{iso:"55+, A8s+, ATo+, KTs+, KJo+, QTs+, JTs", jam:"", over:"44-22, A7s-A2s, K9s-K6s, Q9s, Q8s, J9s, J8s, T9s, T8s, 98s, 87s, 76s, 65s, 54s, A9o, KTo, QTo, JTo, QJo"},
+  SB:{iso:"66+, A9s+, AJo+, KJs+, KQo", jam:"", over:"55-22, A8s-A2s, ATo, K5s+, KTo+, Q7s+, QTo+, J7s+, JTo, T7s+, 97s+, 86s+, 75s+, 65s, 54s"},
+  BB:{iso:"77+, ATs+, AJo+, KQs, KQo", jam:"", over:""}
+ },
+ "20":{
+  MID:{iso:"TT+, AQs+, AKo", jam:"99-66, AJs, ATs, KQs, AQo, AJo, KQo", over:"55-22, A9s-A2s, KJs, KTs, QJs, QTs, JTs, T9s, 98s, 87s, 76s, 65s"},
+  LATE:{iso:"99+, AJs+, AQo+", jam:"88-55, ATs-A7s, AJo-A9o, KQs, KJs, KQo, QJs", over:"44-22, A6s-A2s, KTs, K9s, QTs, JTs, T9s, 98s, 87s, 76s, 65s, KJo, QJo, JTo"},
+  SB:{iso:"99+, AJs+, AQo+", jam:"88-55, ATs-A8s, AJo, ATo, KQs, KJs, KQo", over:"44-22, A7s-A2s, K7s+, Q8s+, J8s+, T8s+, 97s+, 87s, 76s, 65s, KTo+, QTo+, JTo"},
+  BB:{iso:"99+, AJs+, AQo+", jam:"88-66, ATs, A9s, AJo, ATo, KQs, KJs, KQo", over:""}
+ },
+ "10":{
+  MID:{iso:"", jam:"44+, A7s+, A9o+, KJs+, KQo, QJs", over:""},
+  LATE:{iso:"", jam:"22+, A2s+, A5o+, K8s+, KTo+, Q9s+, QJo, J9s+, T9s", over:""},
+  SB:{iso:"", jam:"22+, A2s+, A2o+, K5s+, K9o+, Q8s+, QTo+, J8s+, JTo, T8s+, 98s", over:""},
+  BB:{iso:"", jam:"33+, A2s+, A7o+, K9s+, KTo+, Q9s+, QJo, J9s+, T9s", over:""}
+ },
+ "sub10":{
+  MID:{iso:"", jam:"22+, A2s+, A5o+, K8s+, KTo+, Q9s+, QJo, J9s+, T9s", over:""},
+  LATE:{iso:"", jam:"22+, A2s+, A2o+, K4s+, K8o+, Q7s+, Q9o+, J7s+, JTo, T7s+, 97s+, 87s", over:""},
+  SB:{iso:"", jam:"22+, A2s+, A2o+, K2s+, K5o+, Q4s+, Q8o+, J6s+, J9o+, T6s+, T9o, 96s+, 86s+, 75s+, 65s", over:""},
+  BB:{iso:"", jam:"22+, A2s+, A2o+, K5s+, K9o+, Q8s+, QTo+, J8s+, JTo, T8s+, 97s+, 87s", over:""}
+ }
+};
+var ISO3={MID:"99+, AJs+, AQo+", LATE:"88+, ATs+, AJo+", SB:"88+, AJs+, AQo+", BB:"99+, AJs+, AQo+"};
+var SPEC="22+, A9s-A2s, T9s, 98s, 87s, 76s, 65s, 54s";
+
+/* ---------- helpers ---------- */
+function tierOf(bb){ if(bb>=70) return "100"; if(bb>=40) return "50"; if(bb>=25) return "30"; if(bb>=15) return "20"; if(bb>=10) return "10"; return "sub10"; }
+function tierName(t){ return t==="sub10"?"under 10bb":t+"bb"; }
+function roleOf(i){ return i<=4?"MID":(i<=6?"LATE":(i===7?"SB":"BB")); }
+function groupOf(i){ return i<=2?"EP":(i<=4?"MP":(i<=6?"LP":"SB")); }
+function cellHand(i,j){ if(i===j) return R[i]+R[i]; if(i<j) return R[i]+R[j]+"s"; return R[j]+R[i]+"o"; }
+function assemble(layers){ /* layers: [[set,label],...] later layers win */
+  var map={}; var i,j;
+  for(i=0;i<13;i++) for(j=0;j<13;j++){ map[cellHand(i,j)]="Fold"; }
+  layers.forEach(function(L){ L[0].forEach(function(h){ map[h]=L[1]; }); });
+  return map;
+}
+/* Hands of one shape (pairs, or one high card at one suitedness) are ordered by kicker.
+   fillUp adds every hand that beats the weakest one present, so a bigger pair or a better
+   kicker never does less than a worse one. Wheel aces are called for their straights rather
+   than their kicker, so skipWheel keeps them from dragging A6s to A8s in with them. */
+function fillUp(set,skipWheel){
+  var floor={},out=new Set(set),i,j,h,l;
+  var line=function(x){ return isPair(x)?"p":x[0]+x[2]; };
+  set.forEach(function(x){
+    if(skipWheel&&x[0]==="A"&&isSuited(x)&&rv(x[1])<=5) return;
+    var k=rv(x[1]); l=line(x); if(!(l in floor)||k<floor[l]) floor[l]=k;
+  });
+  for(i=0;i<13;i++) for(j=0;j<13;j++){ h=cellHand(i,j); l=line(h); if((l in floor)&&rv(h[1])>floor[l]) out.add(h); }
+  return out;
+}
+function multiwayOK(role){
+  return function(h){
+    var a=rv(h[0]),b=rv(h[1]),hi=Math.max(a,b),lo=Math.min(a,b),gap=hi-lo-1;
+    if(role==="MID"||role==="SB") return (isPair(h)&&a>=5)||(isSuited(h)&&score(h)>=52);
+    return isPair(h)||(isSuited(h)&&(hi===14||gap<=1||lo>=10))||score(h)>=55;
+  };
+}
+
+/* ---------- builders ---------- */
+function buildRFI(tier,hero,live,seats){
+  var hu=(seats===2&&hero===7);
+  var set=parse(hu?HU[tier]:RFI[tier][P[hero]]);
+  var jam=(tier==="10"||tier==="sub10");
+  var notes=[];
+  if(live&&hero>=5) set=trim(set,jam?0.1:0.12,isOff);
+  var size={
+    "100":"Open to 2.5x, 3x from the small blind.",
+    "50":"Open to 2.3 to 2.5x, 3x from the small blind.",
+    "30":"Open to 2.2x, 2.5x from the small blind. Call a jam with TT+, AQs+ and AK from early seats, 88+ and AJ+ from late seats.",
+    "20":"Min raise or 2.2x. Call a jam with TT+ and AQ+ from early seats, 88+ and AJ+ from late seats. From the small blind raise 2.5x.",
+    "10":"Jam. With 12bb or more you can min raise QQ+ and AK to invite action, everything else goes all in.",
+    "sub10":"Jam everything shown. Under 6bb widen further: any pair, any ace and most kings from late seats."
+  }[tier];
+  notes.push(size);
+  if(hu) notes.push("Heads up the small blind is also the button and plays in position after the flop, so it opens far wider than a full ring small blind.");
+  if(live){
+    if(jam) notes.push("Weak players call jams with ace rag and king high, so the junk jams lose fold equity. The bottom of the range is cut and the rest plays for value.");
+    else notes.push("A weak field never punishes sizing, so 3x is fine from every seat and builds pots for your strong hands. The weakest offsuit steals are cut from late seats because they call too much.");
+  }
+  return {map:assemble([[set,jam?"Jam":"Raise"]]), notes:notes};
+}
+
+function buildVS(tier,hero,raiser,size,callers,live,seats){
+  var role=roleOf(hero),grp=groupOf(raiser);
+  var base=VR100[role][grp];
+  var value,bluff,call,notes=[];
+  /* value */
+  value=(tier==="100")?parse(base.v):parse(VAL[tier][grp]);
+  /* bluffs */
+  if(tier==="100"||tier==="50") bluff=parse(base.b);
+  else if(tier==="30") bluff=parse(BLUFF["30"][grp]);
+  else if(tier==="20") bluff=(role==="MID")?new Set():parse(BLUFF["20"][grp]);
+  else bluff=new Set();
+  /* calls */
+  if(tier==="100") call=parse(base.c);
+  else if(tier==="50"){
+    call=parse(base.c);
+    if(role!=="BB") call=minus(call,parse("22-44"));
+    if(role==="MID"||role==="SB"){ call=minus(call,parse("54s, 65s")); call=trim(call,0.05); }
+  } else if(tier==="30"){
+    call=parse(base.c);
+    if(role==="MID"||role==="SB") call=minus(call,parse("22-66, 98s, 87s, 76s, 65s, 54s"));
+    if(role==="LATE") call=minus(call,parse("22-44, 65s, 54s"));
+    if(role==="BB") call=trim(call,0.12);
+  } else if(tier==="20"){
+    call=parse(CALL20[role][grp]);
+  } else if(tier==="10"){
+    call=(role==="BB"&&(size==="2"||size==="2.5"))?parse(CALL10[size]):new Set();
+  } else call=new Set();
+  /* open size */
+  var aggr=(tier==="100"||tier==="50")?"Bet3":(tier==="30"?((size==="3"||size==="4")?"Jam":"Bet3"):"Jam");
+  if(tier==="30"&&aggr==="Jam"){ value=parse(VAL["20"][grp]); bluff=new Set(); }
+  var huBB=(seats===2&&hero===8);
+  /* a 30bb jam over a big open keeps the tighter jamming range, the wider list there is for small 3bets */
+  if(huBB&&!(tier==="30"&&aggr==="Jam")) value=union(value,parse(HUDEF[tier]));
+  if(size==="2"&&role==="BB"&&tier!=="10"&&tier!=="sub10"){
+    var thr=EXTRA_MIN[grp]+(tier==="20"?6:0);
+    call=union(call,keep(parse(EXTRA),function(h){return score(h)>=thr;}));
+  }
+  /* short big blind vs a small open: the price matters more than playability, so flat whatever is strong enough for this raiser */
+  if(role==="BB"&&(tier==="10"||tier==="sub10")&&(size==="2"||size==="2.5")){
+    var sthr=EXTRA_MIN[grp]+(tier==="10"?4:0)+(size==="2.5"?5:0);
+    call=union(call,keep(parse(EXTRA+", 22+, A2s+"),function(h){return score(h)>=sthr;}));
+  }
+  if(size==="3") call=trim(call,0.2);
+  if(size==="4") call=trim(call,0.4);
+  /* callers */
+  if(callers>=1){
+    bluff=new Set();
+    call=keep(call,function(h){ return !(isOff(h)&&score(h)<44); });
+    if((role==="LATE"||role==="BB")&&tier!=="10"&&tier!=="sub10"){
+      var spec=(tier==="20")?parse("22-66"):parse("22-66, 65s, 54s, 76s, 87s, A2s-A5s");
+      call=union(call,minus(spec,value));
+    }
+  }
+  if(callers>=2){
+    value=parse(PREMIUM[tier][grp]);
+    call=keep(call,multiwayOK(role));
+  }
+  /* live adjustments */
+  if(live){
+    bluff=new Set();
+    value=union(value,parse(LIVEADD[tier][grp]));
+    if(role==="MID"||role==="SB") call=trim(call,0.3);
+    else if(role==="LATE"){ call=trim(call,0.1); if(tier==="100"||tier==="50") call=union(call,minus(parse("22-66"),value)); }
+    else call=trim(call,0.15);
+    if(aggr==="Jam"&&(tier==="30"||tier==="20")) value=trim(value,0.06,isOff);
+  }
+  /* the value and call tables come from different charts and get swapped by stack, callers and
+     live mode, which can strand a hand between them (JJ folding while TT calls). Close the gaps. */
+  value=fillUp(value);
+  call=fillUp(call,true);
+  call=minus(minus(call,value),bluff);
+  /* notes */
+  if(tier==="100"||tier==="50") notes.push("3bet to 3x the open in position, 3.5 to 4x out of position. Fold to a 4bet unless you hold QQ+ or AK.");
+  else if(tier==="30"){ if(aggr==="Jam") notes.push("Vs an open this big at 30bb a 3bet commits you anyway, so the aggressive hands go all in."); else notes.push("3bet small, about 2.5x the open, and call a jam with the top of the value range. Vs a 3x or bigger open just jam."); }
+  else if(tier==="20") notes.push("Jam over the open. Calls are for hands that play well and either close the action or have position.");
+  else if(role==="BB"&&call.size) notes.push("Jam or call as shown. The calls are there because the big blind gets too good a price against a small open to fold them. After the flop, commit with any pair or strong draw and give up otherwise.");
+  else notes.push("Jam or fold. Calling this short leaves you guessing on the flop.");
+  if(huBB) notes.push("Heads up the small blind raises most of its hands, so you continue far wider than in a full ring blind battle.");
+  if(size==="4") notes.push("Big open: give up the marginal calls. If you continue, favour the aggressive line.");
+  if(callers===1) notes.push("One caller: squeeze only with value, call with pairs and suited connectors, fold the weak offsuit hands.");
+  if(callers>=2) notes.push("Multiway: only premiums squeeze. Call with pairs and suited hands that can flop big.");
+  if(live){
+    if(aggr==="Bet3") notes.push("They rarely fold to 3bets and rarely 4bet light, so the 3bets are value only and wider, with no bluffs. Marginal hands out of position are folded because they play badly against several callers.");
+    else notes.push("Junk jams are cut and value jams are added, since they call with dominated hands and rarely fold.");
+  }
+  return {map:assemble([[call,"Call"],[bluff,aggr],[value,aggr]]), notes:notes};
+}
+
+function buildLIMP(tier,hero,limpers,live,seats){
+  var role=roleOf(hero);
+  var deep=(tier==="100"||tier==="50"||tier==="30");
+  /* heads up the limper is the small blind with close to any two cards, so the big blind raises like a late seat isolating */
+  var hu=(seats===2&&role==="BB");
+  var d=LIMP[deep?"100":tier][hu?"LATE":role];
+  var iso=parse(d.iso),jam=parse(d.jam),over=parse(d.over),notes=[],r;
+  if(tier==="30") over=trim(over,0.3);
+  var demote=function(removed){ /* hands taken out of the raising range become limps if they play well, else folds */
+    if(!deep&&tier!=="20") return;
+    removed.forEach(function(h){ if(isPair(h)||isSuited(h)||(role!=="MID"&&score(h)>=46)) over.add(h); });
+  };
+  if(limpers===2){
+    r=split(iso,0.25); iso=r.kept; demote(r.removed);
+    if(jam.size){ r=split(jam,deep?0.2:0.12,deep?null:isOff); jam=r.kept; demote(r.removed); }
+    if(deep) over=union(over,minus(parse(SPEC),iso));
+  }
+  if(limpers>=3){
+    if(deep){ var ni=parse(ISO3[role]); demote(minus(iso,ni)); iso=ni; over=union(over,minus(parse(SPEC),iso)); }
+    else if(tier==="20"){ jam=union(jam,iso); iso=new Set(); r=split(jam,0.3); jam=r.kept; demote(r.removed); jam=union(jam,parse("99+, AJs+, AQo+")); }
+    else jam=trim(jam,0.2,isOff);
+  }
+  if(live){
+    if(iso.size){ r=split(iso,0.2,isOff); iso=r.kept; demote(r.removed); }
+    if(jam.size&&tier==="20") jam=trim(jam,0.08,isOff);
+    if(deep&&(role==="LATE"||role==="SB")) over=union(over,minus(parse(SPEC),iso));
+  }
+  if(role==="BB") over=new Set();
+  over=minus(minus(over,iso),jam);
+  /* notes */
+  if(tier==="100"||tier==="50") notes.push("Iso raise to 4bb plus 1bb per limper in position, add another 1bb out of position.");
+  else if(tier==="30") notes.push("Iso raise to 3.5bb plus 1bb per limper. Limping behind is worth less at this depth, so it is trimmed to the best hands.");
+  else if(tier==="20") notes.push("Raise premiums to about 4x so they call, jam the middle of the range over the dead money, and limp behind cheaply with hands that flop well.");
+  else if(tier==="10") notes.push("Jam or fold over limpers. The dead money is large relative to your stack, so this is much wider than an opening range. With 12bb or more you can raise to 3bb instead with the top of the range to keep worse hands in.");
+  else notes.push("Jam or fold over limpers. In the big blind just check the rest and see a free flop.");
+  if(hu) notes.push("Heads up the small blind limps a very wide range, so the big blind raises more hands than it would against a full ring limper.");
+  if(role==="BB"&&deep) notes.push("Everything not raised is a free check.");
+  if(role==="SB"&&deep) notes.push("Green hands complete for half a blind.");
+  if(live&&deep) notes.push("Live players limp and call wide, so raise to 5bb plus 1bb per limper, mostly for value, and limp behind with hands that flop big rather than raising them.");
+  else if(live) notes.push("Limpers here are weak and fold a lot of their limps, and the dead money is worth a big share of your stack, so this is a wide value and pressure range rather than a tight one.");
+  var map=assemble([[over,"Limp"],[jam,"Jam"],[iso,"Iso"]]);
+  if(role==="BB"){ Object.keys(map).forEach(function(h){ if(map[h]==="Fold") map[h]="Check"; }); }
+  return {map:map, notes:notes};
+}
+
+/* ---------- state & UI ---------- */
+var DEFAULTS={bb:100,scn:"rfi",hero:6,raiser:2,size:"2.5",callers:0,limpers:1,live:0,sel:null,grid:false,seats:9,suit:"o",theme:"auto"};
+var HANDS={}; (function(){ var i,j; for(i=0;i<13;i++) for(j=0;j<13;j++) HANDS[cellHand(i,j)]=1; })();
+/* saved settings may be stale or hand edited, so every field is checked before it is used */
+function clean(s){
+  var D=DEFAULTS;
+  var num=function(v,lo,hi,d){ v=parseInt(v,10); return (v>=lo&&v<=hi)?v:d; };
+  var one=function(v,list,d){ return list.indexOf(v)>=0?v:d; };
+  return {bb:num(s.bb,1,400,D.bb), scn:one(s.scn,["rfi","vs","limp"],D.scn), hero:num(s.hero,0,8,D.hero), raiser:num(s.raiser,0,8,D.raiser),
+    size:one(String(s.size),["2","2.5","3","4"],D.size), callers:num(s.callers,0,2,D.callers), limpers:num(s.limpers,1,3,D.limpers),
+    live:num(s.live,0,1,D.live), sel:(typeof s.sel==="string"&&HANDS.hasOwnProperty(s.sel))?s.sel:null, grid:s.grid===true,
+    seats:num(s.seats,2,9,D.seats), suit:one(s.suit,["s","o"],D.suit), theme:one(s.theme,["auto","light","dark"],D.theme)};
+}
+var state=clean(DEFAULTS);
+try{ var saved=JSON.parse(localStorage.getItem("pf-ranges-v1")); if(saved&&typeof saved==="object") state=clean(saved); }catch(e){}
+function save(){ try{ localStorage.setItem("pf-ranges-v1",JSON.stringify(state)); }catch(e){} }
+var $=function(id){return document.getElementById(id);};
+var pick=null;      /* first rank of a hand being entered with the rank keys */
+var gridFocus=null; /* the one grid cell that is in the tab order */
+var LABEL={Raise:"Raise",Iso:"Raise",Bet3:"3bet",Jam:"Jam",Call:"Call",Limp:"Limp",Check:"Check",Fold:"Fold"};
+var LEG={Raise:"Raise",Iso:"Iso raise",Bet3:"3bet",Jam:"Jam",Call:"Call",Limp:"Limp behind",Check:"Check",Fold:"Fold"};
+var CSSV={Raise:"raise",Iso:"raise",Bet3:"raise",Jam:"jam",Call:"call",Limp:"call",Check:"check",Fold:"fold"};
+var RANKNAME={A:"Ace",K:"King",Q:"Queen",J:"Jack",T:"Ten"};
+
+function each(list,fn){ Array.prototype.forEach.call(list,fn); }
+function setOn(containerId,attr,val){
+  each($(containerId).querySelectorAll("button"),function(b){
+    var on=String(b.getAttribute(attr))===String(val); b.classList.toggle("on",on); b.setAttribute("aria-pressed",on);
+  });
+}
+/* A short handed seat plays like the full ring seat with the same number of players left to act,
+   so seats are stored as full ring indices and only the labels change. */
+function offset(){ return 9-state.seats; }
+function seatName(i){
+  var n=state.seats, o=offset();
+  if(n===2) return i===7?"BTN/SB":"BB";
+  if(n===3) return P[i];
+  var early=["UTG","UTG+1","UTG+2"], k=0, j;
+  for(j=o;j<=i;j++){ if(j<=2||j===o){ if(j===i) return early[k]; k++; } }
+  return P[i];
+}
+function seatButton(i,on){
+  var b=document.createElement("button"); b.textContent=seatName(i); b.setAttribute("data-v",i);
+  b.classList.toggle("on",on); b.setAttribute("aria-pressed",on); return b;
+}
+function renderSeats(){
+  var h=$("hero"); h.innerHTML=""; var i;
+  for(i=offset();i<9;i++) h.appendChild(seatButton(i,i===state.hero));
+  var r=$("raiser"); r.innerHTML="";
+  for(i=offset();i<state.hero;i++) r.appendChild(seatButton(i,i===state.raiser));
+}
+function renderPicker(){
+  var sel=state.sel, a=pick||(sel?sel[0]:null), b=pick?null:(sel?sel[1]:null), pair=!!(sel&&isPair(sel));
+  each($("ranks").querySelectorAll("button"),function(btn){
+    var r=btn.getAttribute("data-r"), on=(r===a||r===b); btn.classList.toggle("on",on); btn.setAttribute("aria-pressed",on);
+  });
+  setOn("suit","data-v",pair?"":state.suit);
+  each($("suit").querySelectorAll("button"),function(btn){ btn.disabled=pair; });
+}
+function applyTheme(){
+  var t=state.theme, root=document.documentElement;
+  if(t==="auto") root.removeAttribute("data-theme"); else root.setAttribute("data-theme",t);
+  var dark=t==="dark"||(t==="auto"&&window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);
+  $("themeColor").setAttribute("content",dark?"#14171C":"#E8E6DF");
+}
+function limitButtons(id,max){
+  each($(id).querySelectorAll("button"),function(b){ b.disabled=parseInt(b.getAttribute("data-v"),10)>max; });
+}
+function situation(tier){
+  var s=state.seats+" handed, "+seatName(state.hero)+", "+tierName(tier)+", "+(state.live?"live":"GTO");
+  if(state.scn==="vs") s+=", vs "+seatName(state.raiser)+" open "+({"2":"2x","2.5":"2.5x","3":"3x","4":"4x+"}[state.size])+(state.callers?(", "+(state.callers>=2?"2+ callers":"1 caller")):"");
+  else if(state.scn==="limp") s+=", vs "+(state.limpers>=3?"3+ limpers":(state.limpers===2?"2 limpers":"1 limper"));
+  else s+=", first in";
+  return s;
+}
+/* the answer is shown in the sticky readout and spoken from a separate plain text live region */
+function answer(html,spoken){ $("readout").innerHTML=html; if($("sr").textContent!==spoken) $("sr").textContent=spoken; }
+function render(){
+  var bb=state.bb, tier=tierOf(bb);
+  $("bb").value=bb;
+  $("tierLabel").textContent="Using the "+tierName(tier)+" chart";
+  applyTheme();
+  setOn("theme","data-v",state.theme);
+  setOn("flavor","data-v",state.live);
+  setOn("scn","data-v",state.scn);
+  setOn("size","data-v",state.size);
+  setOn("chips","data-bb",bb);
+  $("seatsOut").textContent=state.seats;
+  $("seatMinus").disabled=state.seats<=2; $("seatPlus").disabled=state.seats>=9;
+  if(state.hero<offset()) state.hero=offset();
+  if(state.raiser>=state.hero) state.raiser=state.hero-1;
+  if(state.raiser<offset()) state.raiser=offset();
+  var maxCallers=Math.max(0,state.hero-state.raiser-1), maxLimpers=state.hero-offset();
+  if(state.callers>maxCallers) state.callers=Math.min(2,maxCallers);
+  if(maxLimpers>0&&state.limpers>maxLimpers) state.limpers=Math.min(3,maxLimpers);
+  limitButtons("callers",maxCallers); limitButtons("limpers",maxLimpers);
+  setOn("callers","data-v",state.callers); setOn("limpers","data-v",state.limpers);
+  renderSeats();
+  renderPicker();
+  var vs=state.scn==="vs",lp=state.scn==="limp";
+  $("fRaiser").classList.toggle("hidden",!vs);
+  $("fSize").classList.toggle("hidden",!vs);
+  $("fCallers").classList.toggle("hidden",!vs);
+  $("fLimpers").classList.toggle("hidden",!lp);
+  var out=$("out"), msg=null;
+  if((vs||lp)&&state.hero===offset()) msg=seatName(state.hero)+" acts first, so nobody can raise or limp in front of you. Pick a later seat or use First in.";
+  else if(!vs&&!lp&&state.hero===8) msg="If everyone folds to the big blind the hand is over and you win the blinds. Pick another seat, or choose Facing a raise or Facing limpers.";
+  if(msg){ answer('<span class="w">'+msg+'</span>',msg); out.innerHTML=""; save(); return; }
+  var res;
+  if(vs) res=buildVS(tier,state.hero,state.raiser,state.size,state.callers,!!state.live,state.seats);
+  else if(lp) res=buildLIMP(tier,state.hero,state.limpers,!!state.live,state.seats);
+  else res=buildRFI(tier,state.hero,!!state.live,state.seats);
+  if(tier!=="100") res.notes.push("These charts assume no ante. With a big blind ante in play there is more to win, so open and jam about one seat wider than shown and defend the big blind more often.");
+  var map=res.map;
+  /* counts */
+  var counts={},total=0,h;
+  Object.keys(map).forEach(function(k){ counts[map[k]]=(counts[map[k]]||0)+combos(k); total+=combos(k); });
+  var order=["Raise","Iso","Bet3","Jam","Call","Limp","Check","Fold"];
+  var shown=function(a){ var v=100*counts[a]/total; return v<0.5?"under 1%":(Math.round(v)+"%"); };
+  var legend=order.filter(function(a){return counts[a];}).map(function(a){
+    return '<span><i style="background:var(--'+CSSV[a]+')"></i>'+LEG[a]+' <b>'+shown(a)+'</b></span>';
+  }).join("");
+  /* readout: the hand stays selected while settings change, so one hand can be checked across spots */
+  var sel=state.sel, where=situation(tier);
+  var clr=function(what){ return '<button class="clr" id="clearSel" aria-label="Clear '+what+' and show the whole range">&times;</button>'; };
+  if(pick){
+    answer('<span class="h">'+pick+'<span class="q">?</span></span>'+clr(pick)+'<span class="s">Now tap the second card. '+where+'</span>',pick+", now pick the second card.");
+  } else if(sel&&map[sel]){
+    answer('<span class="h">'+sel+'</span><span class="a"><i style="background:var(--'+CSSV[map[sel]]+')"></i>'+LABEL[map[sel]]+'</span>'+clr(sel)+'<span class="s">'+where+'</span>',sel+": "+LABEL[map[sel]]+". "+where+".");
+  } else {
+    var top=order.filter(function(a){return counts[a]&&a!=="Fold"&&a!=="Check"&&(100*counts[a]/total)>=0.5;}).map(function(a){return LEG[a]+" "+shown(a);}).join(", ")||"Fold everything";
+    answer('<span class="sum">'+top+'</span><span class="s">'+where+'. Pick your hand above or tap it in the grid.</span>',top+". "+where+".");
+  }
+  /* grid: one cell is in the tab order and the arrow keys move between hands */
+  var cells="",i,j,fh=gridFocus||sel||"AA";
+  for(i=0;i<13;i++) for(j=0;j<13;j++){
+    h=cellHand(i,j);
+    cells+='<div class="cell '+map[h]+(h===sel?" sel":"")+'" data-h="'+h+'" role="button" tabindex="'+(h===fh?0:-1)+'" aria-pressed="'+(h===sel)+'" aria-label="'+h+", "+LABEL[map[h]]+'">'+h+'</div>';
+  }
+  var head=sel?("Hand grid, "+sel+" highlighted"):"Hand grid";
+  out.innerHTML='<details class="panel" id="gridPanel"'+(state.grid?" open":"")+'>'
+    +'<summary><span class="open">'+head+'</span><span class="shut">Show the hand grid</span><span class="arrow">&#9660;</span></summary>'
+    +'<div class="body"><div class="grid" id="grid" role="group" aria-label="Hand grid. Arrow keys move between hands, Enter selects.">'+cells+'</div><div class="legend">'+legend+'</div></div></details>'
+    +'<div class="notes">'+res.notes.map(function(n){return "<p>"+n+"</p>";}).join("")+'</div>';
+  save();
+}
+function choose(h,refocus){
+  state.sel=(state.sel===h)?null:h; pick=null; gridFocus=h;
+  if(state.sel&&!isPair(h)) state.suit=h[2];
+  render();
+  if(refocus){ var c=$("grid")&&$("grid").querySelector('[data-h="'+h+'"]'); if(c) c.focus(); }
+}
+
+/* events */
+(function(){ var i,b; for(i=0;i<13;i++){ b=document.createElement("button"); b.textContent=R[i]; b.setAttribute("data-r",R[i]); b.setAttribute("aria-label",RANKNAME[R[i]]||R[i]); $("ranks").appendChild(b); } })();
+function bindGroup(id,key,parser){
+  $(id).addEventListener("click",function(e){
+    var b=e.target.closest("button"); if(!b) return;
+    var v=b.getAttribute("data-v"); if(v===null) return;
+    state[key]=parser?parser(v):v; render();
+  });
+}
+var toInt=function(v){return parseInt(v,10);};
+bindGroup("flavor","live",toInt);
+bindGroup("scn","scn");
+bindGroup("hero","hero",toInt);
+bindGroup("raiser","raiser",toInt);
+bindGroup("size","size");
+bindGroup("callers","callers",toInt);
+bindGroup("limpers","limpers",toInt);
+bindGroup("theme","theme");
+$("ranks").addEventListener("click",function(e){
+  var b=e.target.closest("button"); if(!b) return; var r=b.getAttribute("data-r");
+  if(pick===null){ pick=r; state.sel=null; }
+  else { state.sel=(r===pick)?r+r:((rv(r)>rv(pick)?r+pick:pick+r)+state.suit); gridFocus=state.sel; pick=null; }
+  render();
+});
+$("suit").addEventListener("click",function(e){
+  var b=e.target.closest("button"); if(!b) return;
+  state.suit=b.getAttribute("data-v");
+  if(state.sel&&!isPair(state.sel)){ state.sel=state.sel.slice(0,2)+state.suit; gridFocus=state.sel; }
+  render();
+});
+$("seatMinus").addEventListener("click",function(){ state.seats=Math.max(2,state.seats-1); render(); });
+$("seatPlus").addEventListener("click",function(){ state.seats=Math.min(9,state.seats+1); render(); });
+$("chips").addEventListener("click",function(e){ var b=e.target.closest("button"); if(!b) return; state.bb=parseInt(b.getAttribute("data-bb"),10); render(); });
+$("bb").addEventListener("change",function(){ state.bb=Math.max(1,Math.min(400,parseInt(this.value,10)||1)); render(); });
+$("bb").addEventListener("keydown",function(e){ if(e.key==="Enter"){ this.blur(); } });
+/* single blinds while short, then round fives so the stepper never drifts off them */
+$("minus").addEventListener("click",function(){ var b=state.bb; state.bb=b>15?Math.max(15,Math.ceil(b/5)*5-5):Math.max(1,b-1); render(); });
+$("plus").addEventListener("click",function(){ var b=state.bb; state.bb=b>=15?Math.min(400,Math.floor(b/5)*5+5):b+1; render(); });
+$("readout").addEventListener("click",function(e){ if(e.target.closest("#clearSel")){ state.sel=null; pick=null; render(); } });
+$("out").addEventListener("click",function(e){
+  var sm=e.target.closest("#gridPanel > summary");
+  if(sm){ state.grid=!$("gridPanel").open; save(); return; }
+  var c=e.target.closest(".cell"); if(c) choose(c.getAttribute("data-h"),false);
+});
+$("out").addEventListener("keydown",function(e){
+  var c=e.target.closest(".cell"); if(!c) return;
+  var all=c.parentNode.children, i=Array.prototype.indexOf.call(all,c), n=i;
+  if(e.key==="Enter"||e.key===" "){ e.preventDefault(); choose(c.getAttribute("data-h"),true); return; }
+  if(e.key==="ArrowRight") n=i+1; else if(e.key==="ArrowLeft") n=i-1; else if(e.key==="ArrowDown") n=i+13; else if(e.key==="ArrowUp") n=i-13; else return;
+  e.preventDefault(); if(n<0||n>=all.length) return;
+  c.tabIndex=-1; all[n].tabIndex=0; all[n].focus(); gridFocus=all[n].getAttribute("data-h");
+});
+if(window.matchMedia){ var mq=window.matchMedia("(prefers-color-scheme: dark)"); if(mq.addEventListener) mq.addEventListener("change",applyTheme); else if(mq.addListener) mq.addListener(applyTheme); }
+/* offline copy: only possible when the page is served over https or from localhost */
+if("serviceWorker" in navigator&&/^https?:$/.test(location.protocol)){
+  navigator.serviceWorker.register("sw.js").then(function(){ return navigator.serviceWorker.ready; }).then(function(){ $("offline").classList.remove("hidden"); }).catch(function(){});
+}
+render();
+})();
+</script>
+</body>
+</html>
