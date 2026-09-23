@@ -54,15 +54,13 @@ button{font:inherit;color:var(--btnink);background:var(--btn);border:1px solid v
 button.on{background:var(--btnon);color:var(--btnonink);border-color:var(--btnon)}
 button:focus-visible{outline:2px solid var(--check);outline-offset:2px}
 .seg{display:flex;gap:4px}
-.seg button{min-height:38px;padding:0 14px;font-weight:500}
+.seg button{min-height:38px;padding:0 12px;font-weight:500}
 .field{margin:10px 0 0}
 .label{font-size:13px;color:var(--muted);margin-bottom:5px}
 .row{display:flex;gap:6px;flex-wrap:wrap}
 .row>button{flex:1 1 0;padding:0 6px}
 .seats{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
 .seats button{padding:0 4px}
-.ranks{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px}
-.ranks button{padding:0;font-size:19px;font-weight:600}
 .stackrow{display:flex;gap:6px;align-items:stretch}
 .seatsrow{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 6px 6px 12px}
 .seatsrow .lbl{font-size:15px;color:var(--muted)}
@@ -123,8 +121,9 @@ button[disabled]{opacity:.35;cursor:not-allowed}
   <header class="top">
     <h1>Preflop ranges</h1>
     <div class="seg" id="flavor" role="group" aria-label="Range style">
-      <button data-v="0">GTO</button>
-      <button data-v="1">Live</button>
+      <button data-v="gto">GTO</button>
+      <button data-v="live">Live</button>
+      <button data-v="cash">Cash</button>
     </div>
   </header>
 
@@ -146,17 +145,14 @@ button[disabled]{opacity:.35;cursor:not-allowed}
       <input type="number" id="bb" inputmode="numeric" min="1" max="400" value="100" aria-label="Big blinds">
       <button class="step" id="plus" aria-label="More">+</button>
     </div>
-    <div class="chips" id="chips" role="group" aria-label="Common stack sizes">
-      <button data-bb="100">100</button><button data-bb="50">50</button><button data-bb="30">30</button><button data-bb="20">20</button><button data-bb="12">12</button><button data-bb="7">7</button>
-    </div>
+    <div class="chips" id="chips" role="group" aria-label="Common stack sizes"></div>
     <div class="tier" id="tierLabel"></div>
   </section>
 
-  <section class="field">
-    <div class="label" id="lHand">My hand (tap two ranks, the same one twice for a pair)</div>
-    <div class="ranks" id="ranks" role="group" aria-labelledby="lHand"></div>
-    <div class="row" id="suit" role="group" aria-label="Suited or offsuit">
-      <button data-v="s">Suited</button><button data-v="o">Offsuit</button>
+  <section class="field" id="fRake">
+    <div class="label" id="lRake">Rake (cash games only, taken from every pot that sees a flop)</div>
+    <div class="row" id="rake" role="group" aria-labelledby="lRake">
+      <button data-v="5">5%</button><button data-v="10">10%</button>
     </div>
   </section>
 
@@ -467,8 +463,62 @@ var LIMP={
 var ISO3={MID:"99+, AJs+, AQo+", LATE:"88+, ATs+, AJo+", SB:"88+, AJs+, AQo+", BB:"99+, AJs+, AQo+"};
 var SPEC="22+, A9s-A2s, T9s, 98s, 87s, 76s, 65s, 54s";
 
+/* ---------- ranges: cash games ---------- */
+/* Cash tables are 100bb, 9 handed, 5% rake capped at 3bb, following published solver output
+   (GTO Wizard style NL50 solutions). The 10% rake cuts and the 150/200bb changes are layered on top.
+   Rake is paid whenever a flop is dealt, so it mostly costs the calling hands and pushes every seat
+   toward raise or fold; depth mostly helps small pairs and suited hands and hurts offsuit broadways. */
+var CASHRFI={
+ "UTG":"66+, ATs+, A5s, KTs+, QTs+, JTs, T9s, AJo+, KQo",
+ "UTG+1":"55+, A9s+, A5s, A4s, KTs+, QTs+, JTs, T9s, 98s, AJo+, KQo",
+ "UTG+2":"44+, A7s+, A5s, A4s, K9s+, QTs+, JTs, T9s, 98s, ATo+, KQo",
+ "LJ":"33+, A2s+, K9s+, Q9s+, JTs, T9s, 98s, 87s, ATo+, KJo+",
+ "HJ":"22+, A2s+, K8s+, Q9s+, J9s+, T9s, 98s, 87s, 76s, 65s, A9o+, KJo+, QJo",
+ "CO":"22+, A2s+, K5s+, Q8s+, J8s+, T8s+, 97s+, 86s+, 75s+, 65s, 54s, A8o+, KTo+, QTo+, JTo",
+ "BTN":"22+, A2s+, K2s+, Q4s+, J6s+, T6s+, 96s+, 85s+, 75s+, 64s+, 53s+, 43s, A2o+, K7o+, Q9o+, J9o+, T9o, 98o",
+ "SB":"22+, A2s+, K2s+, Q5s+, J7s+, T7s+, 96s+, 86s+, 75s+, 65s, 54s, A2o+, K8o+, Q9o+, J9o+, T9o"
+};
+/* opens dropped at 10% rake; a hand cut from one seat is also cut from every earlier seat so ranges still widen toward the button */
+var RAKE10RFI={
+ "UTG":"KQo, T9s, 98s, 87s", "UTG+1":"KQo, T9s, 98s, 87s", "UTG+2":"ATo, 98s, 87s", "LJ":"KJo, 87s, 65s", "HJ":"A9o, QJo, 65s, 54s",
+ "CO":"A8o, JTo, 54s, K5s", "BTN":"98o, K7o, 43s, Q4s", "SB":"T9o, K8o, Q9o, 54s, 65s, J7s"
+};
+/* 150bb and deeper: implied odds hands in, dominated offsuit hands out */
+var DEEPRFI={
+ "UTG":{add:"55, 44, A4s, 98s, 87s", cut:"KQo"},
+ "UTG+1":{add:"44, 33, A3s, A2s, 87s, 76s", cut:"KQo"},
+ "UTG+2":{add:"33, 22, A3s, A2s, 87s, 76s", cut:"ATo"},
+ "LJ":{add:"22, 76s, 65s", cut:"ATo"},
+ "HJ":{add:"54s, T8s, 97s", cut:"A9o"},
+ "CO":{add:"64s, K4s, K3s, Q7s", cut:"A8o"},
+ "BTN":{add:"Q3s, Q2s, J5s, T5s, 95s, 84s, 74s, 63s", cut:"98o, K7o"},
+ "SB":{add:"Q4s, J6s, T6s, 95s, 85s, 64s", cut:"K8o, T9o"}
+};
+/* share of the calling range the rake removes, by hero role, at 5% and at 10% */
+var RAKECALL={MID:[0.1,0.25], LATE:[0.08,0.22], SB:[0.4,0.7], BB:[0.1,0.28]};
+/* at 10% rake some late position calls become 3bet bluffs vs a late open, since a call has to pay the rake on the flop */
+var RAKE10BLUFF={MID:"", LATE:"A5s-A2s, K9s", SB:"A5s-A2s, K9s, Q9s", BB:""};
+/* 150bb and deeper: the middle of the 3bet range flats instead, speculative hands call more, suited connectors join the bluffs */
+var DEEPVALCUT={
+ MID:{EP:"", MP:"JJ, AQs"},
+ LATE:{EP:"", MP:"JJ, AQs", LP:"TT, AJs, AQo"},
+ SB:{EP:"", MP:"", LP:""},
+ BB:{EP:"", MP:"JJ, AQs", LP:"TT, AJs, KQs", SB:"99, ATs, KJs, KQo"}
+};
+var DEEPCALL={
+ MID:{EP:"22-44, T9s, 98s, 87s, 76s, 65s", MP:"22-44, T9s, 98s, 87s, 76s, 65s, 54s"},
+ LATE:{EP:"22+, A5s-A2s, T8s, 97s, 86s, 75s, 65s, 54s", MP:"22+, A5s-A2s, T8s, 97s, 86s, 75s, 64s, 54s", LP:"22+, A5s-A2s, T7s, 96s, 85s, 75s, 64s, 53s"},
+ SB:{EP:"22-55", MP:"22-55, 76s, 65s", LP:"22-55, 76s, 65s, 54s"},
+ BB:{EP:"22+, K4s+, Q7s+, J7s+, T7s+, 96s+, 85s+, 74s+, 64s+, 53s+, 43s",
+     MP:"22+, K3s+, Q5s+, J6s+, T6s+, 96s+, 85s+, 74s+, 64s+, 53s+, 43s",
+     LP:"22+, K2s+, Q2s+, J4s+, T5s+, 95s+, 84s+, 74s+, 63s+, 53s+, 43s",
+     SB:"22+, K2s+, Q2s+, J2s+, T4s+, 94s+, 84s+, 73s+, 63s+, 52s+, 42s+, 32s"}
+};
+var DEEPBLUFF={MID:"", LATE:"K9s, Q9s", SB:"K9s, K8s, Q9s, J9s, T9s, 98s, 87s, 76s", BB:""};
+
 /* ---------- helpers ---------- */
-function tierOf(bb){ if(bb>=70) return "100"; if(bb>=40) return "50"; if(bb>=25) return "30"; if(bb>=15) return "20"; if(bb>=10) return "10"; return "sub10"; }
+/* cash games get two deeper tiers; tournaments top out at the 100bb chart */
+function tierOf(bb,cash){ if(cash&&bb>=175) return "200"; if(cash&&bb>=125) return "150"; if(bb>=70) return "100"; if(bb>=40) return "50"; if(bb>=25) return "30"; if(bb>=15) return "20"; if(bb>=10) return "10"; return "sub10"; }
 function tierName(t){ return t==="sub10"?"under 10bb":t+"bb"; }
 function roleOf(i){ return i<=4?"MID":(i<=6?"LATE":(i===7?"SB":"BB")); }
 function groupOf(i){ return i<=2?"EP":(i<=4?"MP":(i<=6?"LP":"SB")); }
@@ -502,12 +552,22 @@ function multiwayOK(role){
 }
 
 /* ---------- builders ---------- */
-function buildRFI(tier,hero,live,seats){
-  var hu=(seats===2&&hero===7);
-  var set=parse(hu?HU[tier]:RFI[tier][P[hero]]);
-  var jam=(tier==="10"||tier==="sub10");
+/* m describes the tab: {live:bool, cash:bool, rake:5|10}. The 150 and 200bb tiers use the 100bb charts plus the deep tables. */
+function chartTier(t){ return (t==="150"||t==="200")?"100":t; }
+function isDeep(t){ return t==="150"||t==="200"; }
+function buildRFI(tier,hero,m,seats){
+  var hu=(seats===2&&hero===7), ct=chartTier(tier), deep=isDeep(tier);
+  var set=parse(hu?HU[ct]:((m.cash&&ct==="100")?CASHRFI[P[hero]]:RFI[ct][P[hero]]));
+  var jam=(ct==="10"||ct==="sub10");
   var notes=[];
-  if(live&&hero>=5) set=trim(set,jam?0.1:0.12,isOff);
+  if(m.live&&hero>=5) set=trim(set,jam?0.1:0.12,isOff);
+  if(m.cash){
+    if(deep&&!hu){ var dp=DEEPRFI[P[hero]]; set=minus(union(set,parse(dp.add)),parse(dp.cut)); }
+    if(m.rake>=10){
+      if(!hu&&ct==="100") set=minus(set,parse(RAKE10RFI[P[hero]]));
+      else set=trim(set,hero>=7?0.1:0.05);
+    }
+  }
   var size={
     "100":"Open to 2.5x, 3x from the small blind.",
     "50":"Open to 2.3 to 2.5x, 3x from the small blind.",
@@ -515,57 +575,68 @@ function buildRFI(tier,hero,live,seats){
     "20":"Min raise or 2.2x. Call a jam with TT+ and AQ+ from early seats, 88+ and AJ+ from late seats. From the small blind raise 2.5x.",
     "10":"Jam. With 12bb or more you can min raise QQ+ and AK to invite action, everything else goes all in.",
     "sub10":"Jam everything shown. Under 6bb widen further: any pair, any ace and most kings from late seats."
-  }[tier];
+  }[ct];
   notes.push(size);
   if(hu) notes.push("Heads up the small blind is also the button and plays in position after the flop, so it opens far wider than a full ring small blind.");
-  if(live){
+  if(m.live){
     if(jam) notes.push("Weak players call jams with ace rag and king high, so the junk jams lose fold equity. The bottom of the range is cut and the rest plays for value.");
     else notes.push("A weak field never punishes sizing, so 3x is fine from every seat and builds pots for your strong hands. The weakest offsuit steals are cut from late seats because they call too much.");
+  }
+  if(m.cash){
+    if(deep) notes.push("150bb and deeper the open size stays the same, but small pairs and suited hands are worth more and dominated offsuit hands less, so those are swapped in and out.");
+    if(m.rake>=10) notes.push("10% rake: every flop is taxed heavily, so the weakest opens are dropped, most of all from the small blind, where the big blind calls often and the pot always gets raked.");
+    else notes.push("5% rake capped at a few blinds costs the marginal opens a little, so the range is close to rake free.");
   }
   return {map:assemble([[set,jam?"Jam":"Raise"]]), notes:notes};
 }
 
-function buildVS(tier,hero,raiser,size,callers,live,seats){
+function buildVS(tier,hero,raiser,size,callers,m,seats){
+  var ct=chartTier(tier), deep=isDeep(tier);
   var role=roleOf(hero),grp=groupOf(raiser);
   var base=VR100[role][grp];
   var value,bluff,call,notes=[];
   /* value */
-  value=(tier==="100")?parse(base.v):parse(VAL[tier][grp]);
+  value=(ct==="100")?parse(base.v):parse(VAL[ct][grp]);
   /* bluffs */
-  if(tier==="100"||tier==="50") bluff=parse(base.b);
-  else if(tier==="30") bluff=parse(BLUFF["30"][grp]);
-  else if(tier==="20") bluff=(role==="MID")?new Set():parse(BLUFF["20"][grp]);
+  if(ct==="100"||ct==="50") bluff=parse(base.b);
+  else if(ct==="30") bluff=parse(BLUFF["30"][grp]);
+  else if(ct==="20") bluff=(role==="MID")?new Set():parse(BLUFF["20"][grp]);
   else bluff=new Set();
   /* calls */
-  if(tier==="100") call=parse(base.c);
-  else if(tier==="50"){
+  if(ct==="100") call=parse(base.c);
+  else if(ct==="50"){
     call=parse(base.c);
     if(role!=="BB") call=minus(call,parse("22-44"));
     if(role==="MID"||role==="SB"){ call=minus(call,parse("54s, 65s")); call=trim(call,0.05); }
-  } else if(tier==="30"){
+  } else if(ct==="30"){
     call=parse(base.c);
     if(role==="MID"||role==="SB") call=minus(call,parse("22-66, 98s, 87s, 76s, 65s, 54s"));
     if(role==="LATE") call=minus(call,parse("22-44, 65s, 54s"));
     if(role==="BB") call=trim(call,0.12);
-  } else if(tier==="20"){
+  } else if(ct==="20"){
     call=parse(CALL20[role][grp]);
-  } else if(tier==="10"){
+  } else if(ct==="10"){
     call=(role==="BB"&&(size==="2"||size==="2.5"))?parse(CALL10[size]):new Set();
   } else call=new Set();
   /* open size */
-  var aggr=(tier==="100"||tier==="50")?"Bet3":(tier==="30"?((size==="3"||size==="4")?"Jam":"Bet3"):"Jam");
-  if(tier==="30"&&aggr==="Jam"){ value=parse(VAL["20"][grp]); bluff=new Set(); }
+  var aggr=(ct==="100"||ct==="50")?"Bet3":(ct==="30"?((size==="3"||size==="4")?"Jam":"Bet3"):"Jam");
+  if(ct==="30"&&aggr==="Jam"){ value=parse(VAL["20"][grp]); bluff=new Set(); }
   var huBB=(seats===2&&hero===8);
   /* a 30bb jam over a big open keeps the tighter jamming range, the wider list there is for small 3bets */
-  if(huBB&&!(tier==="30"&&aggr==="Jam")) value=union(value,parse(HUDEF[tier]));
-  if(size==="2"&&role==="BB"&&tier!=="10"&&tier!=="sub10"){
-    var thr=EXTRA_MIN[grp]+(tier==="20"?6:0);
+  if(huBB&&!(ct==="30"&&aggr==="Jam")) value=union(value,parse(HUDEF[ct]));
+  if(size==="2"&&role==="BB"&&ct!=="10"&&ct!=="sub10"){
+    var thr=EXTRA_MIN[grp]+(ct==="20"?6:0);
     call=union(call,keep(parse(EXTRA),function(h){return score(h)>=thr;}));
   }
   /* short big blind vs a small open: the price matters more than playability, so flat whatever is strong enough for this raiser */
-  if(role==="BB"&&(tier==="10"||tier==="sub10")&&(size==="2"||size==="2.5")){
-    var sthr=EXTRA_MIN[grp]+(tier==="10"?4:0)+(size==="2.5"?5:0);
+  if(role==="BB"&&(ct==="10"||ct==="sub10")&&(size==="2"||size==="2.5")){
+    var sthr=EXTRA_MIN[grp]+(ct==="10"?4:0)+(size==="2.5"?5:0);
     call=union(call,keep(parse(EXTRA+", 22+, A2s+"),function(h){return score(h)>=sthr;}));
+  }
+  /* cash, 150bb and deeper: the middle of the 3bet range flats, implied odds hands call, suited connectors join the bluffs */
+  if(m.cash&&deep){
+    if(callers===0){ var vc=parse(DEEPVALCUT[role][grp]); value=minus(value,vc); call=union(call,vc); bluff=union(bluff,parse(DEEPBLUFF[role])); }
+    call=union(call,parse(DEEPCALL[role][grp]));
   }
   if(size==="3") call=trim(call,0.2);
   if(size==="4") call=trim(call,0.4);
@@ -573,93 +644,117 @@ function buildVS(tier,hero,raiser,size,callers,live,seats){
   if(callers>=1){
     bluff=new Set();
     call=keep(call,function(h){ return !(isOff(h)&&score(h)<44); });
-    if((role==="LATE"||role==="BB")&&tier!=="10"&&tier!=="sub10"){
-      var spec=(tier==="20")?parse("22-66"):parse("22-66, 65s, 54s, 76s, 87s, A2s-A5s");
+    if((role==="LATE"||role==="BB")&&ct!=="10"&&ct!=="sub10"){
+      var spec=(ct==="20")?parse("22-66"):parse("22-66, 65s, 54s, 76s, 87s, A2s-A5s");
       call=union(call,minus(spec,value));
     }
   }
   if(callers>=2){
-    value=parse(PREMIUM[tier][grp]);
+    value=parse(PREMIUM[ct][grp]);
     call=keep(call,multiwayOK(role));
   }
   /* live adjustments */
-  if(live){
+  if(m.live){
     bluff=new Set();
-    value=union(value,parse(LIVEADD[tier][grp]));
+    value=union(value,parse(LIVEADD[ct][grp]));
     if(role==="MID"||role==="SB") call=trim(call,0.3);
-    else if(role==="LATE"){ call=trim(call,0.1); if(tier==="100"||tier==="50") call=union(call,minus(parse("22-66"),value)); }
+    else if(role==="LATE"){ call=trim(call,0.1); if(ct==="100"||ct==="50") call=union(call,minus(parse("22-66"),value)); }
     else call=trim(call,0.15);
-    if(aggr==="Jam"&&(tier==="30"||tier==="20")) value=trim(value,0.06,isOff);
+    if(aggr==="Jam"&&(ct==="30"||ct==="20")) value=trim(value,0.06,isOff);
+  }
+  /* cash adjustments: the rake is paid whenever a flop is dealt, so calling loses value and the weakest calls fold;
+     at 10% some late position calls turn into 3bet bluffs instead */
+  if(m.cash){
+    call=trim(call,RAKECALL[role][m.rake>=10?1:0]);
+    if(m.rake>=10&&callers===0&&(grp==="LP"||grp==="SB")) bluff=union(bluff,parse(RAKE10BLUFF[role]));
   }
   /* the value and call tables come from different charts and get swapped by stack, callers and
      live mode, which can strand a hand between them (JJ folding while TT calls). Close the gaps. */
   value=fillUp(value);
   call=fillUp(call,true);
+  bluff=minus(bluff,value);
   call=minus(minus(call,value),bluff);
   /* notes */
-  if(tier==="100"||tier==="50") notes.push("3bet to 3x the open in position, 3.5 to 4x out of position. Fold to a 4bet unless you hold QQ+ or AK.");
-  else if(tier==="30"){ if(aggr==="Jam") notes.push("Vs an open this big at 30bb a 3bet commits you anyway, so the aggressive hands go all in."); else notes.push("3bet small, about 2.5x the open, and call a jam with the top of the value range. Vs a 3x or bigger open just jam."); }
-  else if(tier==="20") notes.push("Jam over the open. Calls are for hands that play well and either close the action or have position.");
+  if(ct==="100"||ct==="50") notes.push("3bet to 3x the open in position, 3.5 to 4x out of position. Fold to a 4bet unless you hold QQ+ or AK.");
+  else if(ct==="30"){ if(aggr==="Jam") notes.push("Vs an open this big at 30bb a 3bet commits you anyway, so the aggressive hands go all in."); else notes.push("3bet small, about 2.5x the open, and call a jam with the top of the value range. Vs a 3x or bigger open just jam."); }
+  else if(ct==="20") notes.push("Jam over the open. Calls are for hands that play well and either close the action or have position.");
   else if(role==="BB"&&call.size) notes.push("Jam or call as shown. The calls are there because the big blind gets too good a price against a small open to fold them. After the flop, commit with any pair or strong draw and give up otherwise.");
   else notes.push("Jam or fold. Calling this short leaves you guessing on the flop.");
   if(huBB) notes.push("Heads up the small blind raises most of its hands, so you continue far wider than in a full ring blind battle.");
   if(size==="4") notes.push("Big open: give up the marginal calls. If you continue, favour the aggressive line.");
   if(callers===1) notes.push("One caller: squeeze only with value, call with pairs and suited connectors, fold the weak offsuit hands.");
   if(callers>=2) notes.push("Multiway: only premiums squeeze. Call with pairs and suited hands that can flop big.");
-  if(live){
+  if(m.live){
     if(aggr==="Bet3") notes.push("They rarely fold to 3bets and rarely 4bet light, so the 3bets are value only and wider, with no bluffs. Marginal hands out of position are folded because they play badly against several callers.");
     else notes.push("Junk jams are cut and value jams are added, since they call with dominated hands and rarely fold.");
+  }
+  if(m.cash){
+    if(deep) notes.push("150bb and deeper: 3bet to 3.5x in position and 4x or more out of position. The middle of the value range flats instead of 3betting, small pairs and suited connectors call more, and only QQ+ and AK stack off before the flop.");
+    if(m.rake>=10) notes.push("10% rake: a call pays the rake on every flop, so this is close to raise or fold. The small blind almost never flats, the big blind defends far less, and some late position calls turn into 3bet bluffs.");
+    else notes.push("5% rake: calling loses a little of its value, so the weakest calls fold and the small blind mostly 3bets or folds.");
   }
   return {map:assemble([[call,"Call"],[bluff,aggr],[value,aggr]]), notes:notes};
 }
 
-function buildLIMP(tier,hero,limpers,live,seats){
+function buildLIMP(tier,hero,limpers,m,seats){
+  var ct=chartTier(tier), deep=isDeep(tier);
   var role=roleOf(hero);
-  var deep=(tier==="100"||tier==="50"||tier==="30");
+  var dc=(ct==="100"||ct==="50"||ct==="30"); /* the deep chart covers 30bb and up */
   /* heads up the limper is the small blind with close to any two cards, so the big blind raises like a late seat isolating */
   var hu=(seats===2&&role==="BB");
-  var d=LIMP[deep?"100":tier][hu?"LATE":role];
+  var d=LIMP[dc?"100":ct][hu?"LATE":role];
   var iso=parse(d.iso),jam=parse(d.jam),over=parse(d.over),notes=[],r;
-  if(tier==="30") over=trim(over,0.3);
+  if(ct==="30") over=trim(over,0.3);
   var demote=function(removed){ /* hands taken out of the raising range become limps if they play well, else folds */
-    if(!deep&&tier!=="20") return;
+    if(!dc&&ct!=="20") return;
     removed.forEach(function(h){ if(isPair(h)||isSuited(h)||(role!=="MID"&&score(h)>=46)) over.add(h); });
   };
   if(limpers===2){
     r=split(iso,0.25); iso=r.kept; demote(r.removed);
-    if(jam.size){ r=split(jam,deep?0.2:0.12,deep?null:isOff); jam=r.kept; demote(r.removed); }
-    if(deep) over=union(over,minus(parse(SPEC),iso));
+    if(jam.size){ r=split(jam,dc?0.2:0.12,dc?null:isOff); jam=r.kept; demote(r.removed); }
+    if(dc) over=union(over,minus(parse(SPEC),iso));
   }
   if(limpers>=3){
-    if(deep){ var ni=parse(ISO3[role]); demote(minus(iso,ni)); iso=ni; over=union(over,minus(parse(SPEC),iso)); }
-    else if(tier==="20"){ jam=union(jam,iso); iso=new Set(); r=split(jam,0.3); jam=r.kept; demote(r.removed); jam=union(jam,parse("99+, AJs+, AQo+")); }
+    if(dc){ var ni=parse(ISO3[role]); demote(minus(iso,ni)); iso=ni; over=union(over,minus(parse(SPEC),iso)); }
+    else if(ct==="20"){ jam=union(jam,iso); iso=new Set(); r=split(jam,0.3); jam=r.kept; demote(r.removed); jam=union(jam,parse("99+, AJs+, AQo+")); }
     else jam=trim(jam,0.2,isOff);
   }
-  if(live){
+  if(m.live){
     if(iso.size){ r=split(iso,0.2,isOff); iso=r.kept; demote(r.removed); }
-    if(jam.size&&tier==="20") jam=trim(jam,0.08,isOff);
+    if(jam.size&&ct==="20") jam=trim(jam,0.08,isOff);
+    if(dc&&(role==="LATE"||role==="SB")) over=union(over,minus(parse(SPEC),iso));
+  }
+  /* cash: limped pots are raked, so limping behind is cut, more so at 10%; deep stacks give the speculative limps their implied odds back */
+  if(m.cash&&role!=="BB"){
     if(deep&&(role==="LATE"||role==="SB")) over=union(over,minus(parse(SPEC),iso));
+    over=trim(over,m.rake>=10?0.5:0.2);
   }
   if(role==="BB") over=new Set();
   over=minus(minus(over,iso),jam);
   /* notes */
-  if(tier==="100"||tier==="50") notes.push("Iso raise to 4bb plus 1bb per limper in position, add another 1bb out of position.");
-  else if(tier==="30") notes.push("Iso raise to 3.5bb plus 1bb per limper. Limping behind is worth less at this depth, so it is trimmed to the best hands.");
-  else if(tier==="20") notes.push("Raise premiums to about 4x so they call, jam the middle of the range over the dead money, and limp behind cheaply with hands that flop well.");
-  else if(tier==="10") notes.push("Jam or fold over limpers. The dead money is large relative to your stack, so this is much wider than an opening range. With 12bb or more you can raise to 3bb instead with the top of the range to keep worse hands in.");
+  if(ct==="100"||ct==="50") notes.push("Iso raise to 4bb plus 1bb per limper in position, add another 1bb out of position.");
+  else if(ct==="30") notes.push("Iso raise to 3.5bb plus 1bb per limper. Limping behind is worth less at this depth, so it is trimmed to the best hands.");
+  else if(ct==="20") notes.push("Raise premiums to about 4x so they call, jam the middle of the range over the dead money, and limp behind cheaply with hands that flop well.");
+  else if(ct==="10") notes.push("Jam or fold over limpers. The dead money is large relative to your stack, so this is much wider than an opening range. With 12bb or more you can raise to 3bb instead with the top of the range to keep worse hands in.");
   else notes.push("Jam or fold over limpers. In the big blind just check the rest and see a free flop.");
   if(hu) notes.push("Heads up the small blind limps a very wide range, so the big blind raises more hands than it would against a full ring limper.");
-  if(role==="BB"&&deep) notes.push("Everything not raised is a free check.");
-  if(role==="SB"&&deep) notes.push("Green hands complete for half a blind.");
-  if(live&&deep) notes.push("Live players limp and call wide, so raise to 5bb plus 1bb per limper, mostly for value, and limp behind with hands that flop big rather than raising them.");
-  else if(live) notes.push("Limpers here are weak and fold a lot of their limps, and the dead money is worth a big share of your stack, so this is a wide value and pressure range rather than a tight one.");
+  if(role==="BB"&&dc) notes.push("Everything not raised is a free check.");
+  if(role==="SB"&&dc) notes.push("Green hands complete for half a blind.");
+  if(m.live&&dc) notes.push("Live players limp and call wide, so raise to 5bb plus 1bb per limper, mostly for value, and limp behind with hands that flop big rather than raising them.");
+  else if(m.live) notes.push("Limpers here are weak and fold a lot of their limps, and the dead money is worth a big share of your stack, so this is a wide value and pressure range rather than a tight one.");
+  if(m.cash){
+    if(deep) notes.push("150bb and deeper: limping behind with suited connectors and small pairs is worth more, since they have the implied odds to chase.");
+    if(m.rake>=10) notes.push("10% rake: limped pots are taxed heavily, so limping behind is cut to the best speculative hands and the rest raise for value or fold.");
+    else notes.push("5% rake: limping behind is still fine with hands that flop big, but raising for value is the better line whenever the hand is strong enough.");
+  }
   var map=assemble([[over,"Limp"],[jam,"Jam"],[iso,"Iso"]]);
   if(role==="BB"){ Object.keys(map).forEach(function(h){ if(map[h]==="Fold") map[h]="Check"; }); }
   return {map:map, notes:notes};
 }
 
 /* ---------- state & UI ---------- */
-var DEFAULTS={bb:100,scn:"rfi",hero:6,raiser:2,size:"2.5",callers:0,limpers:1,live:0,sel:null,grid:false,seats:9,suit:"o",theme:"auto"};
+var DEFAULTS={bb:100,scn:"rfi",hero:6,raiser:2,size:"2.5",callers:0,limpers:1,mode:"gto",rake:"5",sel:null,gridShut:false,seats:9,theme:"auto"};
+var CHIPS={cash:[250,200,150,100,50,30],other:[100,50,30,20,12,7]};
 var HANDS={}; (function(){ var i,j; for(i=0;i<13;i++) for(j=0;j<13;j++) HANDS[cellHand(i,j)]=1; })();
 /* saved settings may be stale or hand edited, so every field is checked before it is used */
 function clean(s){
@@ -668,19 +763,18 @@ function clean(s){
   var one=function(v,list,d){ return list.indexOf(v)>=0?v:d; };
   return {bb:num(s.bb,1,400,D.bb), scn:one(s.scn,["rfi","vs","limp"],D.scn), hero:num(s.hero,0,8,D.hero), raiser:num(s.raiser,0,8,D.raiser),
     size:one(String(s.size),["2","2.5","3","4"],D.size), callers:num(s.callers,0,2,D.callers), limpers:num(s.limpers,1,3,D.limpers),
-    live:num(s.live,0,1,D.live), sel:(typeof s.sel==="string"&&HANDS.hasOwnProperty(s.sel))?s.sel:null, grid:s.grid===true,
-    seats:num(s.seats,2,9,D.seats), suit:one(s.suit,["s","o"],D.suit), theme:one(s.theme,["auto","light","dark"],D.theme)};
+    mode:one(s.mode,["gto","live","cash"],s.live===1?"live":D.mode), rake:one(String(s.rake),["5","10"],D.rake),
+    sel:(typeof s.sel==="string"&&HANDS.hasOwnProperty(s.sel))?s.sel:null, gridShut:s.gridShut===true,
+    seats:num(s.seats,2,9,D.seats), theme:one(s.theme,["auto","light","dark"],D.theme)};
 }
 var state=clean(DEFAULTS);
 try{ var saved=JSON.parse(localStorage.getItem("pf-ranges-v1")); if(saved&&typeof saved==="object") state=clean(saved); }catch(e){}
 function save(){ try{ localStorage.setItem("pf-ranges-v1",JSON.stringify(state)); }catch(e){} }
 var $=function(id){return document.getElementById(id);};
-var pick=null;      /* first rank of a hand being entered with the rank keys */
 var gridFocus=null; /* the one grid cell that is in the tab order */
 var LABEL={Raise:"Raise",Iso:"Raise",Bet3:"3bet",Jam:"Jam",Call:"Call",Limp:"Limp",Check:"Check",Fold:"Fold"};
 var LEG={Raise:"Raise",Iso:"Iso raise",Bet3:"3bet",Jam:"Jam",Call:"Call",Limp:"Limp behind",Check:"Check",Fold:"Fold"};
 var CSSV={Raise:"raise",Iso:"raise",Bet3:"raise",Jam:"jam",Call:"call",Limp:"call",Check:"check",Fold:"fold"};
-var RANKNAME={A:"Ace",K:"King",Q:"Queen",J:"Jack",T:"Ten"};
 
 function each(list,fn){ Array.prototype.forEach.call(list,fn); }
 function setOn(containerId,attr,val){
@@ -709,13 +803,12 @@ function renderSeats(){
   var r=$("raiser"); r.innerHTML="";
   for(i=offset();i<state.hero;i++) r.appendChild(seatButton(i,i===state.raiser));
 }
-function renderPicker(){
-  var sel=state.sel, a=pick||(sel?sel[0]:null), b=pick?null:(sel?sel[1]:null), pair=!!(sel&&isPair(sel));
-  each($("ranks").querySelectorAll("button"),function(btn){
-    var r=btn.getAttribute("data-r"), on=(r===a||r===b); btn.classList.toggle("on",on); btn.setAttribute("aria-pressed",on);
-  });
-  setOn("suit","data-v",pair?"":state.suit);
-  each($("suit").querySelectorAll("button"),function(btn){ btn.disabled=pair; });
+/* cash games run deeper than tournaments, so the quick stack buttons follow the tab */
+function renderChips(cash){
+  var c=$("chips"), key=cash?"cash":"other";
+  if(c.getAttribute("data-set")===key) return;
+  c.setAttribute("data-set",key); c.innerHTML="";
+  CHIPS[key].forEach(function(v){ var b=document.createElement("button"); b.textContent=v; b.setAttribute("data-bb",v); c.appendChild(b); });
 }
 function applyTheme(){
   var t=state.theme, root=document.documentElement;
@@ -726,8 +819,10 @@ function applyTheme(){
 function limitButtons(id,max){
   each($(id).querySelectorAll("button"),function(b){ b.disabled=parseInt(b.getAttribute("data-v"),10)>max; });
 }
+function modeOf(){ return {live:state.mode==="live",cash:state.mode==="cash",rake:parseInt(state.rake,10)}; }
+function modeName(){ return state.mode==="cash"?"cash "+state.rake+"% rake":(state.mode==="live"?"live":"GTO"); }
 function situation(tier){
-  var s=state.seats+" handed, "+seatName(state.hero)+", "+tierName(tier)+", "+(state.live?"live":"GTO");
+  var s=state.seats+" handed, "+seatName(state.hero)+", "+tierName(tier)+", "+modeName();
   if(state.scn==="vs") s+=", vs "+seatName(state.raiser)+" open "+({"2":"2x","2.5":"2.5x","3":"3x","4":"4x+"}[state.size])+(state.callers?(", "+(state.callers>=2?"2+ callers":"1 caller")):"");
   else if(state.scn==="limp") s+=", vs "+(state.limpers>=3?"3+ limpers":(state.limpers===2?"2 limpers":"1 limper"));
   else s+=", first in";
@@ -736,14 +831,17 @@ function situation(tier){
 /* the answer is shown in the sticky readout and spoken from a separate plain text live region */
 function answer(html,spoken){ $("readout").innerHTML=html; if($("sr").textContent!==spoken) $("sr").textContent=spoken; }
 function render(){
-  var bb=state.bb, tier=tierOf(bb);
+  var m=modeOf(), bb=state.bb, tier=tierOf(bb,m.cash);
   $("bb").value=bb;
   $("tierLabel").textContent="Using the "+tierName(tier)+" chart";
   applyTheme();
   setOn("theme","data-v",state.theme);
-  setOn("flavor","data-v",state.live);
+  setOn("flavor","data-v",state.mode);
+  setOn("rake","data-v",state.rake);
+  $("fRake").classList.toggle("hidden",!m.cash);
   setOn("scn","data-v",state.scn);
   setOn("size","data-v",state.size);
+  renderChips(m.cash);
   setOn("chips","data-bb",bb);
   $("seatsOut").textContent=state.seats;
   $("seatMinus").disabled=state.seats<=2; $("seatPlus").disabled=state.seats>=9;
@@ -756,7 +854,6 @@ function render(){
   limitButtons("callers",maxCallers); limitButtons("limpers",maxLimpers);
   setOn("callers","data-v",state.callers); setOn("limpers","data-v",state.limpers);
   renderSeats();
-  renderPicker();
   var vs=state.scn==="vs",lp=state.scn==="limp";
   $("fRaiser").classList.toggle("hidden",!vs);
   $("fSize").classList.toggle("hidden",!vs);
@@ -767,10 +864,11 @@ function render(){
   else if(!vs&&!lp&&state.hero===8) msg="If everyone folds to the big blind the hand is over and you win the blinds. Pick another seat, or choose Facing a raise or Facing limpers.";
   if(msg){ answer('<span class="w">'+msg+'</span>',msg); out.innerHTML=""; save(); return; }
   var res;
-  if(vs) res=buildVS(tier,state.hero,state.raiser,state.size,state.callers,!!state.live,state.seats);
-  else if(lp) res=buildLIMP(tier,state.hero,state.limpers,!!state.live,state.seats);
-  else res=buildRFI(tier,state.hero,!!state.live,state.seats);
-  if(tier!=="100") res.notes.push("These charts assume no ante. With a big blind ante in play there is more to win, so open and jam about one seat wider than shown and defend the big blind more often.");
+  if(vs) res=buildVS(tier,state.hero,state.raiser,state.size,state.callers,m,state.seats);
+  else if(lp) res=buildLIMP(tier,state.hero,state.limpers,m,state.seats);
+  else res=buildRFI(tier,state.hero,m,state.seats);
+  if(m.cash){ if(bb<40) res.notes.push("Short stack in a cash game: there are no antes, so the tournament chart applies as printed, with the rake cuts on top."); }
+  else if(tier!=="100") res.notes.push("These charts assume no ante. With a big blind ante in play there is more to win, so open and jam about one seat wider than shown and defend the big blind more often.");
   var map=res.map;
   /* counts */
   var counts={},total=0,h;
@@ -782,14 +880,12 @@ function render(){
   }).join("");
   /* readout: the hand stays selected while settings change, so one hand can be checked across spots */
   var sel=state.sel, where=situation(tier);
-  var clr=function(what){ return '<button class="clr" id="clearSel" aria-label="Clear '+what+' and show the whole range">&times;</button>'; };
-  if(pick){
-    answer('<span class="h">'+pick+'<span class="q">?</span></span>'+clr(pick)+'<span class="s">Now tap the second card. '+where+'</span>',pick+", now pick the second card.");
-  } else if(sel&&map[sel]){
-    answer('<span class="h">'+sel+'</span><span class="a"><i style="background:var(--'+CSSV[map[sel]]+')"></i>'+LABEL[map[sel]]+'</span>'+clr(sel)+'<span class="s">'+where+'</span>',sel+": "+LABEL[map[sel]]+". "+where+".");
+  if(sel&&map[sel]){
+    answer('<span class="h">'+sel+'</span><span class="a"><i style="background:var(--'+CSSV[map[sel]]+')"></i>'+LABEL[map[sel]]+'</span>'
+      +'<button class="clr" id="clearSel" aria-label="Clear '+sel+' and show the whole range">&times;</button><span class="s">'+where+'</span>',sel+": "+LABEL[map[sel]]+". "+where+".");
   } else {
     var top=order.filter(function(a){return counts[a]&&a!=="Fold"&&a!=="Check"&&(100*counts[a]/total)>=0.5;}).map(function(a){return LEG[a]+" "+shown(a);}).join(", ")||"Fold everything";
-    answer('<span class="sum">'+top+'</span><span class="s">'+where+'. Pick your hand above or tap it in the grid.</span>',top+". "+where+".");
+    answer('<span class="sum">'+top+'</span><span class="s">'+where+'. Tap a hand in the grid to check it.</span>',top+". "+where+".");
   }
   /* grid: one cell is in the tab order and the arrow keys move between hands */
   var cells="",i,j,fh=gridFocus||sel||"AA";
@@ -798,21 +894,19 @@ function render(){
     cells+='<div class="cell '+map[h]+(h===sel?" sel":"")+'" data-h="'+h+'" role="button" tabindex="'+(h===fh?0:-1)+'" aria-pressed="'+(h===sel)+'" aria-label="'+h+", "+LABEL[map[h]]+'">'+h+'</div>';
   }
   var head=sel?("Hand grid, "+sel+" highlighted"):"Hand grid";
-  out.innerHTML='<details class="panel" id="gridPanel"'+(state.grid?" open":"")+'>'
+  out.innerHTML='<details class="panel" id="gridPanel"'+(state.gridShut?"":" open")+'>'
     +'<summary><span class="open">'+head+'</span><span class="shut">Show the hand grid</span><span class="arrow">&#9660;</span></summary>'
     +'<div class="body"><div class="grid" id="grid" role="group" aria-label="Hand grid. Arrow keys move between hands, Enter selects.">'+cells+'</div><div class="legend">'+legend+'</div></div></details>'
     +'<div class="notes">'+res.notes.map(function(n){return "<p>"+n+"</p>";}).join("")+'</div>';
   save();
 }
 function choose(h,refocus){
-  state.sel=(state.sel===h)?null:h; pick=null; gridFocus=h;
-  if(state.sel&&!isPair(h)) state.suit=h[2];
+  state.sel=(state.sel===h)?null:h; gridFocus=h;
   render();
   if(refocus){ var c=$("grid")&&$("grid").querySelector('[data-h="'+h+'"]'); if(c) c.focus(); }
 }
 
 /* events */
-(function(){ var i,b; for(i=0;i<13;i++){ b=document.createElement("button"); b.textContent=R[i]; b.setAttribute("data-r",R[i]); b.setAttribute("aria-label",RANKNAME[R[i]]||R[i]); $("ranks").appendChild(b); } })();
 function bindGroup(id,key,parser){
   $(id).addEventListener("click",function(e){
     var b=e.target.closest("button"); if(!b) return;
@@ -821,7 +915,8 @@ function bindGroup(id,key,parser){
   });
 }
 var toInt=function(v){return parseInt(v,10);};
-bindGroup("flavor","live",toInt);
+bindGroup("flavor","mode");
+bindGroup("rake","rake");
 bindGroup("scn","scn");
 bindGroup("hero","hero",toInt);
 bindGroup("raiser","raiser",toInt);
@@ -829,18 +924,6 @@ bindGroup("size","size");
 bindGroup("callers","callers",toInt);
 bindGroup("limpers","limpers",toInt);
 bindGroup("theme","theme");
-$("ranks").addEventListener("click",function(e){
-  var b=e.target.closest("button"); if(!b) return; var r=b.getAttribute("data-r");
-  if(pick===null){ pick=r; state.sel=null; }
-  else { state.sel=(r===pick)?r+r:((rv(r)>rv(pick)?r+pick:pick+r)+state.suit); gridFocus=state.sel; pick=null; }
-  render();
-});
-$("suit").addEventListener("click",function(e){
-  var b=e.target.closest("button"); if(!b) return;
-  state.suit=b.getAttribute("data-v");
-  if(state.sel&&!isPair(state.sel)){ state.sel=state.sel.slice(0,2)+state.suit; gridFocus=state.sel; }
-  render();
-});
 $("seatMinus").addEventListener("click",function(){ state.seats=Math.max(2,state.seats-1); render(); });
 $("seatPlus").addEventListener("click",function(){ state.seats=Math.min(9,state.seats+1); render(); });
 $("chips").addEventListener("click",function(e){ var b=e.target.closest("button"); if(!b) return; state.bb=parseInt(b.getAttribute("data-bb"),10); render(); });
@@ -849,10 +932,10 @@ $("bb").addEventListener("keydown",function(e){ if(e.key==="Enter"){ this.blur()
 /* single blinds while short, then round fives so the stepper never drifts off them */
 $("minus").addEventListener("click",function(){ var b=state.bb; state.bb=b>15?Math.max(15,Math.ceil(b/5)*5-5):Math.max(1,b-1); render(); });
 $("plus").addEventListener("click",function(){ var b=state.bb; state.bb=b>=15?Math.min(400,Math.floor(b/5)*5+5):b+1; render(); });
-$("readout").addEventListener("click",function(e){ if(e.target.closest("#clearSel")){ state.sel=null; pick=null; render(); } });
+$("readout").addEventListener("click",function(e){ if(e.target.closest("#clearSel")){ state.sel=null; render(); } });
 $("out").addEventListener("click",function(e){
   var sm=e.target.closest("#gridPanel > summary");
-  if(sm){ state.grid=!$("gridPanel").open; save(); return; }
+  if(sm){ state.gridShut=$("gridPanel").open; save(); return; }
   var c=e.target.closest(".cell"); if(c) choose(c.getAttribute("data-h"),false);
 });
 $("out").addEventListener("keydown",function(e){

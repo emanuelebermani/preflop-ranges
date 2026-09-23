@@ -5,10 +5,11 @@
 
    It pulls the script out of the page (everything above the "state & UI" marker, which needs
    no browser), builds every combination of stack, seat, raiser, open size, callers, limpers,
-   table size and GTO/live, and fails if:
+   table size and tab (GTO, live, cash at 5% and at 10% rake), and fails if:
 
      1. a range string contains a token the parser does not understand (a typo is otherwise silent)
-     2. a first-in range is not at least as wide as the seat before it
+     2. a first-in range is not at least as wide as the seat before it, in the raw tables and in
+        the built cash ranges (the rake and depth tables edit the seats independently)
      3. a stronger hand does less than a weaker hand of the same shape, e.g. JJ folds while TT calls
 
    Wheel aces (A5s-A2s) are added to calling ranges on purpose for their straights, so
@@ -20,7 +21,8 @@ var html=fs.readFileSync(path.join(__dirname,"preflop-ranges.html"),"utf8");
 var src=html.split("<script>")[1].split("</script>")[0];
 if(src.indexOf(MARK)<0){ console.error("Marker not found: "+MARK); process.exit(2); }
 src=src.split(MARK)[0].replace("(function(){","");
-var TABLES=["RFI","HU","HUDEF","VR100","VAL","BLUFF","CALL20","CALL10","PREMIUM","LIVEADD","EXTRA","LIMP","ISO3","SPEC"];
+var TABLES=["RFI","HU","HUDEF","VR100","VAL","BLUFF","CALL20","CALL10","PREMIUM","LIVEADD","EXTRA","LIMP","ISO3","SPEC",
+  "CASHRFI","RAKE10RFI","DEEPRFI","RAKE10BLUFF","DEEPVALCUT","DEEPCALL","DEEPBLUFF"];
 var M=new Function(src+"\nreturn {tok:tok,parse:parse,combos:combos,R:R,P:P,buildRFI:buildRFI,buildVS:buildVS,buildLIMP:buildLIMP,tables:{"+TABLES.map(function(t){return t+":"+t;}).join(",")+"}};")();
 
 var failures=[];
@@ -33,14 +35,16 @@ function fail(kind,msg){ failures.push(kind+": "+msg); }
 })(M.tables,"tables");
 
 /* 2. first-in ranges widen from UTG to the button */
-Object.keys(M.tables.RFI).forEach(function(tier){
+function widens(desc,setOf){
   var prev=null;
-  M.P.slice(0,7).forEach(function(seat){
-    var cur=M.parse(M.tables.RFI[tier][seat]);
-    if(prev) prev.forEach(function(h){ if(!cur.has(h)) fail("first in",tier+"bb "+seat+" drops "+h+" that the seat before opens"); });
+  M.P.slice(0,7).forEach(function(seat,i){
+    var cur=setOf(seat,i);
+    if(prev) prev.forEach(function(h){ if(!cur.has(h)) fail("first in",desc+" "+seat+" drops "+h+" that the seat before opens"); });
     prev=cur;
   });
-});
+}
+Object.keys(M.tables.RFI).forEach(function(tier){ widens(tier+"bb",function(seat){ return M.parse(M.tables.RFI[tier][seat]); }); });
+widens("cash 100bb table",function(seat){ return M.parse(M.tables.CASHRFI[seat]); });
 
 /* 3. no stronger hand does less than a weaker one of the same shape */
 var R=M.R, PASSIVE={Fold:1,Check:1};
@@ -61,19 +65,27 @@ function holes(map){
   });
   return out;
 }
+function active(map){ var s=new Set(); Object.keys(map).forEach(function(h){ if(!PASSIVE[map[h]]) s.add(h); }); return s; }
 var NAMES=M.P, TIERS=["100","50","30","20","10","sub10"], SIZES=["2","2.5","3","4"], count=0;
+var MODES=[
+  {name:"gto", m:{live:false,cash:false,rake:5}, tiers:TIERS},
+  {name:"live", m:{live:true,cash:false,rake:5}, tiers:TIERS},
+  {name:"cash 5%", m:{live:false,cash:true,rake:5}, tiers:["200","150"].concat(TIERS)},
+  {name:"cash 10%", m:{live:false,cash:true,rake:10}, tiers:["200","150"].concat(TIERS)}
+];
 function check(desc,map){ count++; holes(map).forEach(function(x){ fail("hole",desc+": "+x); }); }
-[false,true].forEach(function(live){ var mode=live?"live":"gto";
-  TIERS.forEach(function(t){
+MODES.forEach(function(mode){ var m=mode.m, name=mode.name;
+  mode.tiers.forEach(function(t){
     var hero,r,c,l;
-    for(hero=0;hero<=7;hero++) check("first in "+mode+" "+t+"bb "+NAMES[hero],M.buildRFI(t,hero,live,9).map);
-    check("first in heads up "+mode+" "+t+"bb",M.buildRFI(t,7,live,2).map);
+    for(hero=0;hero<=7;hero++) check("first in "+name+" "+t+"bb "+NAMES[hero],M.buildRFI(t,hero,m,9).map);
+    if(m.cash&&(t==="200"||t==="150"||t==="100")) widens("cash "+m.rake+"% "+t+"bb built",function(seat,i){ return active(M.buildRFI(t,i,m,9).map); });
+    check("first in heads up "+name+" "+t+"bb",M.buildRFI(t,7,m,2).map);
     for(hero=1;hero<=8;hero++) for(r=0;r<hero;r++) SIZES.forEach(function(size){
-      for(c=0;c<=Math.min(2,hero-r-1);c++) check("vs raise "+mode+" "+t+"bb "+NAMES[hero]+" vs "+NAMES[r]+" "+size+"x, "+c+" callers",M.buildVS(t,hero,r,size,c,live,9).map);
+      for(c=0;c<=Math.min(2,hero-r-1);c++) check("vs raise "+name+" "+t+"bb "+NAMES[hero]+" vs "+NAMES[r]+" "+size+"x, "+c+" callers",M.buildVS(t,hero,r,size,c,m,9).map);
     });
-    SIZES.forEach(function(size){ check("vs raise heads up "+mode+" "+t+"bb "+size+"x",M.buildVS(t,8,7,size,0,live,2).map); });
-    for(hero=1;hero<=8;hero++) for(l=1;l<=Math.min(3,hero);l++) check("vs limp "+mode+" "+t+"bb "+NAMES[hero]+", "+l+" limpers",M.buildLIMP(t,hero,l,live,9).map);
-    check("vs limp heads up "+mode+" "+t+"bb",M.buildLIMP(t,8,1,live,2).map);
+    SIZES.forEach(function(size){ check("vs raise heads up "+name+" "+t+"bb "+size+"x",M.buildVS(t,8,7,size,0,m,2).map); });
+    for(hero=1;hero<=8;hero++) for(l=1;l<=Math.min(3,hero);l++) check("vs limp "+name+" "+t+"bb "+NAMES[hero]+", "+l+" limpers",M.buildLIMP(t,hero,l,m,9).map);
+    check("vs limp heads up "+name+" "+t+"bb",M.buildLIMP(t,8,1,m,2).map);
   });
 });
 
