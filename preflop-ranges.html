@@ -638,6 +638,9 @@ function buildVS(tier,hero,raiser,size,callers,m,seats){
     if(callers===0){ var vc=parse(DEEPVALCUT[role][grp]); value=minus(value,vc); call=union(call,vc); bluff=union(bluff,parse(DEEPBLUFF[role])); }
     call=union(call,parse(DEEPCALL[role][grp]));
   }
+  /* a bigger open makes a 3bet bluff cost more and get through less, so the bluffs shrink with the size:
+     half of them vs 3x, none vs 4x. The dropped bluffs are judged as calls along with everything else. */
+  if(size==="3"||size==="4"){ var bs=split(bluff,size==="4"?1:0.5); bluff=bs.kept; call=union(call,bs.removed); }
   if(size==="3") call=trim(call,0.2);
   if(size==="4") call=trim(call,0.4);
   /* callers */
@@ -666,7 +669,7 @@ function buildVS(tier,hero,raiser,size,callers,m,seats){
      at 10% some late position calls turn into 3bet bluffs instead */
   if(m.cash){
     call=trim(call,RAKECALL[role][m.rake>=10?1:0]);
-    if(m.rake>=10&&callers===0&&(grp==="LP"||grp==="SB")) bluff=union(bluff,parse(RAKE10BLUFF[role]));
+    if(m.rake>=10&&callers===0&&size!=="4"&&(grp==="LP"||grp==="SB")){ var rb=parse(RAKE10BLUFF[role]); if(size==="3") rb=trim(rb,0.5); bluff=union(bluff,rb); }
   }
   /* the value and call tables come from different charts and get swapped by stack, callers and
      live mode, which can strand a hand between them (JJ folding while TT calls). Close the gaps. */
@@ -681,7 +684,8 @@ function buildVS(tier,hero,raiser,size,callers,m,seats){
   else if(role==="BB"&&call.size) notes.push("Jam or call as shown. The calls are there because the big blind gets too good a price against a small open to fold them. After the flop, commit with any pair or strong draw and give up otherwise.");
   else notes.push("Jam or fold. Calling this short leaves you guessing on the flop.");
   if(huBB) notes.push("Heads up the small blind raises most of its hands, so you continue far wider than in a full ring blind battle.");
-  if(size==="4") notes.push("Big open: give up the marginal calls. If you continue, favour the aggressive line.");
+  if(size==="3"&&aggr==="Bet3") notes.push("3x open: a 3bet bluff risks more and gets through less, so only the best of the bluffs stay.");
+  if(size==="4") notes.push("Big open: the marginal calls are given up, and the 3bet bluffs with them, since a bluff now risks more against a raiser who folds less. Raise the value hands and call only what plays well.");
   if(callers===1) notes.push("One caller: squeeze only with value, call with pairs and suited connectors, fold the weak offsuit hands.");
   if(callers>=2) notes.push("Multiway: only premiums squeeze. Call with pairs and suited hands that can flop big.");
   if(m.live){
